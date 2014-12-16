@@ -126,17 +126,17 @@ class WrappedBox(W_Object):
                                  space.wrap("Box has no int value"))
         return space.wrap(jit_hooks.box_getint(self.llbox))
 
-@unwrap_spec(no=int)
+#@unwrap_spec(no=int)
 def descr_new_box(space, w_tp, no):
     return WrappedBox(jit_hooks.boxint_new(no))
 
-WrappedBox.typedef = TypeDef(
-    'Box',
-    __new__ = interp2app(descr_new_box),
-    getint = interp2app(WrappedBox.descr_getint),
-)
+# WrappedBox.typedef = TypeDef(
+#     'Box',
+# #    __new__ = interp2app(descr_new_box),
+#     #getint = interp2app(WrappedBox.descr_getint),
+#)
 
-@unwrap_spec(num=int, offset=int, repr=str, w_res=W_Object)
+#@unwrap_spec(num=int, offset=int, repr=str, w_res=W_Object)
 def descr_new_resop(space, w_tp, num, w_args, w_res, offset=-1,
                     repr=''):
     args = [space.interp_w(WrappedBox, w_arg).llbox for w_arg in
@@ -150,7 +150,7 @@ def descr_new_resop(space, w_tp, num, w_args, w_res, offset=-1,
         llres = w_res.llbox
     return WrappedOp(jit_hooks.resop_new(num, args, llres), offset, repr)
 
-@unwrap_spec(repr=str, jd_name=str, call_depth=int, call_id=int)
+#@unwrap_spec(repr=str, jd_name=str, call_depth=int, call_id=int)
 def descr_new_dmp(space, w_tp, w_args, repr, jd_name, call_depth, call_id,
     w_greenkey):
 
@@ -179,7 +179,7 @@ class WrappedOp(W_Object):
     def descr_name(self, space):
         return space.wrap(hlstr(jit_hooks.resop_getopname(self.op)))
 
-    @unwrap_spec(no=int)
+    #@unwrap_spec(no=int)
     def descr_getarg(self, space, no):
         try:
             box = jit_hooks.resop_getarg(self.op, no)
@@ -188,7 +188,7 @@ class WrappedOp(W_Object):
                                  space.wrap("Index out of range"))
         return WrappedBox(box)
 
-    @unwrap_spec(no=int, w_box=WrappedBox)
+    #@unwrap_spec(no=int, w_box=WrappedBox)
     def descr_setarg(self, space, no, w_box):
         jit_hooks.resop_setarg(self.op, no, w_box.llbox)
 
@@ -226,40 +226,40 @@ class DebugMergePoint(WrappedOp):
     def get_jitdriver_name(self, space):
         return space.wrap(self.jd_name)
 
-WrappedOp.typedef = TypeDef(
-    'ResOperation',
-    __doc__ = WrappedOp.__doc__,
-    __new__ = interp2app(descr_new_resop),
-    __repr__ = interp2app(WrappedOp.descr_repr),
-    num = GetSetProperty(WrappedOp.descr_num),
-    name = GetSetProperty(WrappedOp.descr_name),
-    getarg = interp2app(WrappedOp.descr_getarg),
-    setarg = interp2app(WrappedOp.descr_setarg),
-    result = GetSetProperty(WrappedOp.descr_getresult,
-                            WrappedOp.descr_setresult),
-    offset = interp_attrproperty("offset", cls=WrappedOp),
-)
+# WrappedOp.typedef = TypeDef(
+#     'ResOperation',
+#     __doc__ = WrappedOp.__doc__,
+#     #__new__ = interp2app(descr_new_resop),
+#     #__repr__ = interp2app(WrappedOp.descr_repr),
+#     num = GetSetProperty(WrappedOp.descr_num),
+#     name = GetSetProperty(WrappedOp.descr_name),
+#     #getarg = interp2app(WrappedOp.descr_getarg),
+#     #setarg = interp2app(WrappedOp.descr_setarg),
+#     result = GetSetProperty(WrappedOp.descr_getresult,
+#                             WrappedOp.descr_setresult),
+#     offset = interp_attrproperty("offset", cls=WrappedOp),
+#)
 WrappedOp.acceptable_as_base_class = False
 
-DebugMergePoint.typedef = TypeDef(
-    'DebugMergePoint', WrappedOp.typedef,
-    __new__ = interp2app(descr_new_dmp),
-    __doc__ = DebugMergePoint.__doc__,
-    greenkey = interp_attrproperty_w("w_greenkey", cls=DebugMergePoint,
-               doc="Representation of place where the loop was compiled. "
-                    "In the case of the main interpreter loop, it's a triplet "
-                    "(code, ofs, is_profiled)"),
-    pycode = GetSetProperty(DebugMergePoint.get_pycode),
-    bytecode_no = GetSetProperty(DebugMergePoint.get_bytecode_no,
-                                 doc="offset in the bytecode"),
-    call_depth = interp_attrproperty("call_depth", cls=DebugMergePoint,
-                                     doc="Depth of calls within this loop"),
-    call_id = interp_attrproperty("call_id", cls=DebugMergePoint,
-                     doc="Number of applevel function traced in this loop"),
-    jitdriver_name = GetSetProperty(DebugMergePoint.get_jitdriver_name,
-                     doc="Name of the jitdriver 'pypyjit' in the case "
-                                    "of the main interpreter loop"),
-)
+# DebugMergePoint.typedef = TypeDef(
+#     'DebugMergePoint', WrappedOp.typedef,
+# #    __new__ = interp2app(descr_new_dmp),
+#     __doc__ = DebugMergePoint.__doc__,
+#     greenkey = interp_attrproperty_w("w_greenkey", cls=DebugMergePoint,
+#                doc="Representation of place where the loop was compiled. "
+#                     "In the case of the main interpreter loop, it's a triplet "
+#                     "(code, ofs, is_profiled)"),
+#     pycode = GetSetProperty(DebugMergePoint.get_pycode),
+#     bytecode_no = GetSetProperty(DebugMergePoint.get_bytecode_no,
+#                                  doc="offset in the bytecode"),
+#     call_depth = interp_attrproperty("call_depth", cls=DebugMergePoint,
+#                                      doc="Depth of calls within this loop"),
+#     call_id = interp_attrproperty("call_id", cls=DebugMergePoint,
+#                      doc="Number of applevel function traced in this loop"),
+#     jitdriver_name = GetSetProperty(DebugMergePoint.get_jitdriver_name,
+#                      doc="Name of the jitdriver 'pypyjit' in the case "
+#                                     "of the main interpreter loop"),
+# )
 DebugMergePoint.acceptable_as_base_class = False
 
 
@@ -313,8 +313,8 @@ class W_JitLoopInfo(W_Object):
         raise OperationError(space.w_TypeError, space.wrap("not a bridge"))
 
 
-@unwrap_spec(loopno=int, asmaddr=int, asmlen=int, loop_no=int,
-             type=str, jd_name=str, bridge_no=int)
+# @unwrap_spec(loopno=int, asmaddr=int, asmlen=int, loop_no=int,
+#              type=str, jd_name=str, bridge_no=int)
 def descr_new_jit_loop_info(space, w_subtype, w_greenkey, w_ops, loopno,
                             asmaddr, asmlen, loop_no, type, jd_name,
                             bridge_no=-1):
@@ -329,30 +329,30 @@ def descr_new_jit_loop_info(space, w_subtype, w_greenkey, w_ops, loopno,
     w_info.bridge_no = bridge_no
     return w_info
 
-W_JitLoopInfo.typedef = TypeDef(
-    'JitLoopInfo',
-    __doc__ = W_JitLoopInfo.__doc__,
-    __new__ = interp2app(descr_new_jit_loop_info),
-    jitdriver_name = interp_attrproperty('jd_name', cls=W_JitLoopInfo,
-                       doc="Name of the JitDriver, pypyjit for the main one"),
-    greenkey = interp_attrproperty_w('w_green_key', cls=W_JitLoopInfo,
-               doc="Representation of place where the loop was compiled. "
-                    "In the case of the main interpreter loop, it's a triplet "
-                    "(code, ofs, is_profiled)"),
-    operations = interp_attrproperty_w('w_ops', cls=W_JitLoopInfo, doc=
-                                       "List of operations in this loop."),
-    loop_no = interp_attrproperty('loop_no', cls=W_JitLoopInfo, doc=
-                                  "Loop cardinal number"),
-    bridge_no = GetSetProperty(W_JitLoopInfo.descr_get_bridge_no,
-                               doc="bridge number (if a bridge)"),
-    type = interp_attrproperty('type', cls=W_JitLoopInfo,
-                               doc="Loop type"),
-    asmaddr = interp_attrproperty('asmaddr', cls=W_JitLoopInfo,
-                                  doc="Address of machine code"),
-    asmlen = interp_attrproperty('asmlen', cls=W_JitLoopInfo,
-                                  doc="Length of machine code"),
-    __repr__ = interp2app(W_JitLoopInfo.descr_repr),
-)
+# W_JitLoopInfo.typedef = TypeDef(
+#     'JitLoopInfo',
+#     __doc__ = W_JitLoopInfo.__doc__,
+# #    __new__ = interp2app(descr_new_jit_loop_info),
+#     jitdriver_name = interp_attrproperty('jd_name', cls=W_JitLoopInfo,
+#                        doc="Name of the JitDriver, pypyjit for the main one"),
+#     greenkey = interp_attrproperty_w('w_green_key', cls=W_JitLoopInfo,
+#                doc="Representation of place where the loop was compiled. "
+#                     "In the case of the main interpreter loop, it's a triplet "
+#                     "(code, ofs, is_profiled)"),
+#     operations = interp_attrproperty_w('w_ops', cls=W_JitLoopInfo, doc=
+#                                        "List of operations in this loop."),
+#     loop_no = interp_attrproperty('loop_no', cls=W_JitLoopInfo, doc=
+#                                   "Loop cardinal number"),
+#     bridge_no = GetSetProperty(W_JitLoopInfo.descr_get_bridge_no,
+#                                doc="bridge number (if a bridge)"),
+#     type = interp_attrproperty('type', cls=W_JitLoopInfo,
+#                                doc="Loop type"),
+#     asmaddr = interp_attrproperty('asmaddr', cls=W_JitLoopInfo,
+#                                   doc="Address of machine code"),
+#     asmlen = interp_attrproperty('asmlen', cls=W_JitLoopInfo,
+#                                   doc="Length of machine code"),
+# #    __repr__ = interp2app(W_JitLoopInfo.descr_repr),
+# )
 W_JitLoopInfo.acceptable_as_base_class = False
 
 
@@ -362,17 +362,17 @@ class W_JitInfoSnapshot(W_Object):
         self.w_counters = w_counters
         self.w_counter_times = w_counter_times
 
-W_JitInfoSnapshot.typedef = TypeDef(
-    "JitInfoSnapshot",
-    loop_run_times = interp_attrproperty_w("w_loop_run_times",
-                                             cls=W_JitInfoSnapshot),
-    counters = interp_attrproperty_w("w_counters",
-                                       cls=W_JitInfoSnapshot,
-                                       doc="various JIT counters"),
-    counter_times = interp_attrproperty_w("w_counter_times",
-                                            cls=W_JitInfoSnapshot,
-                                            doc="various JIT timers")
-)
+# W_JitInfoSnapshot.typedef = TypeDef(
+#     "JitInfoSnapshot",
+#     loop_run_times = interp_attrproperty_w("w_loop_run_times",
+#                                              cls=W_JitInfoSnapshot),
+#     counters = interp_attrproperty_w("w_counters",
+#                                        cls=W_JitInfoSnapshot,
+#                                        doc="various JIT counters"),
+#     counter_times = interp_attrproperty_w("w_counter_times",
+#                                             cls=W_JitInfoSnapshot,
+#                                             doc="various JIT timers")
+# )
 W_JitInfoSnapshot.acceptable_as_base_class = False
 
 def get_stats_snapshot(space):
