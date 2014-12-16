@@ -11,7 +11,7 @@ def make_entry_point(pycketconfig=None):
     from pycket.values_string import W_String
 
     from rpython.rlib import jit
-
+    from pycket.interp_resop import Cache
     def entry_point(argv):
         try:
             return actual_entry(argv)
