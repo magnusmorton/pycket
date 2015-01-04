@@ -3,7 +3,7 @@ from pycket.analysis.base import Analysis
 class Simple(Analysis):
     
     def __init__(self):
-        super(Simple, self).__init__()
+        super(Analysis, self).__init__()
         self.trace = None
 
     def cost(self):
