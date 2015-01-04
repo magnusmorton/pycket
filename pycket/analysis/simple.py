@@ -8,4 +8,4 @@ class Simple(Analysis):
 
     def cost(self):
         """ computes the cost of the analysis"""
-        return self.trace
+        return len(self.trace)
