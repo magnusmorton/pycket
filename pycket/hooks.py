@@ -15,7 +15,7 @@ class PycketJitInterface(JitHookInterface):
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
         self.analysis.set_trace(debug_info.operations)
-        print "TRACE COST: ", str(self.analysis.cost)
+        print "TRACE COST: ", str(self.analysis.cost())
             
     def before_compile(self, debug_info):
         print "BEFORE COMPILE"
