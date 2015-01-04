@@ -28,5 +28,6 @@ class PycketJitInterface(JitHookInterface):
 
     def before_compile_bridge(self, debug_info):
         # in the benchmarks I use, hopefully I won't see this
-        print "BRIDGE!!"
-
+        print "BRIDGE!! TRACE COST"
+        self.analysis.set_trace(debug_info.operations)
+        print str(self.analysis.cost())
