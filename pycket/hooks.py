@@ -14,14 +14,8 @@ class PycketJitInterface(JitHookInterface):
 
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
+        print "LOOP TOKEN: ", str(debug_info.looptoken)
         self.analysis.set_trace(debug_info.operations)
-        print "TRACE COST: "
-        print str(self.analysis.cost())
-            
-    def before_compile(self, debug_info):
-        print "BEFORE COMPILE"
-        self.analysis.set_trace(debug_info.operations)
-        # just making sure it's the same
         print "TRACE COST: "
         print str(self.analysis.cost())
 
