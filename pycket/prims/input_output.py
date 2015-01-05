@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 from rpython.rlib import jit
+from rpython.rlib import jit_hooks
 from rpython.rlib             import streamio as sio
 from rpython.rlib.rbigint     import rbigint
 from rpython.rlib.rstring     import (ParseStringError,
@@ -748,6 +749,27 @@ def write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
     return return_value(values.W_Fixnum(stop - start), env, cont)
 
 
+@expose("jit-debug",simple=False)
+def enable_debug():
+    """ Set the jit debugging - completely necessary for some stats to work,
+    most notably assembler counters.
+    """
+    jit_hooks.stats_set_debug(None, True)
+
+@expose("jit-stats",simple=False)
+def jit_stats():
+    """ Set the jit debugging - completely necessary for some stats to work,
+    most notably assembler counters.
+    """
+    print "TIMES: "
+    print jit_hooks.stats_get_loop_run_times(None)
+    print "COUNTERS: "
+    for i, counter_name in enumerate(Counters.counter_names):
+        v = jit_hooks.stats_get_counter_value(None, i)
+        print v
+        tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
+        print "TRACING: "
+        print tr_time
 
 # FIXME:
 @expose("custom-write?", [values.W_Object])
