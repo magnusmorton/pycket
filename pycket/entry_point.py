@@ -11,7 +11,6 @@ def make_entry_point(pycketconfig=None):
     from pycket.values_string import W_String
 
     from rpython.rlib import jit
-    from pycket.interp_resop import Cache
     def entry_point(argv):
         try:
             return actual_entry(argv)
@@ -38,8 +37,24 @@ def make_entry_point(pycketconfig=None):
         env.commandline_arguments = args_w
         env.module_env.add_module(module_name, ast)
         try:
+            from rpython.rlib import jit_hooks
+            jit_hooks.stats_set_debug(None, True)
             val = interpret_module(ast, env)
         finally:
+            from rpython.rlib import jit_hooks
+            from rpython.rlib.jit import JitHookInterface, Counters
+
+            print "TIMES: "
+            ll_times =  jit_hooks.stats_get_loop_run_times(None)
+            for i in range(len(ll_times)):
+                print "loop ", ll_times[i].type, ll_times[i].number, ll_times[i].counter
+            print "COUNTERS: "
+            for i, counter_name in enumerate(Counters.counter_names):
+                v = jit_hooks.stats_get_counter_value(None, i)
+                print v
+            tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
+            print "TRACING: "
+            print tr_time
             from pycket.prims.input_output import shutdown
             shutdown(env)
         return 0
