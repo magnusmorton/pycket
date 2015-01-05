@@ -45,7 +45,7 @@ def make_entry_point(pycketconfig=None):
             print "TIMES: "
             ll_times =  jit_hooks.stats_get_loop_run_times(None)
             for i in range(len(ll_times)):
-                print ll_times[i].type, ll_times[i].number, ll_times[i].counter
+                print ll_times[i]
             print "COUNTERS: "
             for i, counter_name in enumerate(Counters.counter_names):
                 v = jit_hooks.stats_get_counter_value(None, i)
