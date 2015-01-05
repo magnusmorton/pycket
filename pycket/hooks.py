@@ -28,12 +28,12 @@ class PycketJitInterface(JitHookInterface):
         print "TRACE COST: "
         print str(self.analysis.cost())
 
-        print "TIMES":
+        print "TIMES: "
         print jit_hooks.stats_get_loop_run_times(None)
-        print "COUNTERS"
+        print "COUNTERS: "
         for i, counter_name in enumerate(Counters.counter_names):
             v = jit_hooks.stats_get_counter_value(None, i)
             print v
         tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
-        print "TRACING"
+        print "TRACING: "
         print tr_time
