@@ -11,7 +11,7 @@ class PycketJitInterface(JitHookInterface):
         """ sets the analysis to use"""
         super(PycketJitInterface, self).__init__()
         self.analysis = analysis
-        jit_hooks.stats_set_debug(None, True)
+        
 
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
