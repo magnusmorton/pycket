@@ -749,15 +749,15 @@ def write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
     return return_value(values.W_Fixnum(stop - start), env, cont)
 
 
-@expose("jit-debug",simple=False)
-def enable_debug():
+@expose("jit-debug")
+def enable_debug(args):
     """ Set the jit debugging - completely necessary for some stats to work,
     most notably assembler counters.
     """
     jit_hooks.stats_set_debug(None, True)
 
-@expose("jit-stats",simple=False)
-def jit_stats():
+@expose("jit-stats")
+def jit_stats(args):
     """ Set the jit debugging - completely necessary for some stats to work,
     most notably assembler counters.
     """
