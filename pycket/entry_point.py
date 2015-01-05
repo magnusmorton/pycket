@@ -43,7 +43,9 @@ def make_entry_point(pycketconfig=None):
             from rpython.rlib.jit import JitHookInterface, Counters
 
             print "TIMES: "
-            print jit_hooks.stats_get_loop_run_times(None)
+            ll_times =  jit_hooks.stats_get_loop_run_times(None)
+            for i in range(len(ll_times)):
+                print ll_times[i].type, ll_times[i].number, ll_times[i].counter
             print "COUNTERS: "
             for i, counter_name in enumerate(Counters.counter_names):
                 v = jit_hooks.stats_get_counter_value(None, i)
