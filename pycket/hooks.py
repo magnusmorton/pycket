@@ -14,7 +14,7 @@ class PycketJitInterface(JitHookInterface):
 
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
-        print "LOOP TOKEN: ", repr(debug_info.looptoken)
+        print "LOOP TOKEN: ", debug_info.looptoken.__repr__()
         self.analysis.set_trace(debug_info.operations)
         print "TRACE COST: "
         print str(self.analysis.cost())
@@ -23,7 +23,7 @@ class PycketJitInterface(JitHookInterface):
     def after_compile_bridge(self, debug_info):
         # in the benchmarks I use, hopefully I won't see this
         print "BRIDGE!! "
-        print "LOOP TOKEN: ", repr(debug_info.looptoken)
+        print "LOOP TOKEN: ", debug_info.looptoken.__repr__()
         self.analysis.set_trace(debug_info.operations)
         print "TRACE COST: "
         print str(self.analysis.cost())
