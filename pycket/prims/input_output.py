@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 from rpython.rlib import jit
-from rpython.rlib import jit_hooks
 from rpython.rlib             import streamio as sio
 from rpython.rlib.rbigint     import rbigint
 from rpython.rlib.rstring     import (ParseStringError,
@@ -748,14 +747,6 @@ def write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
     w_port.write("".join(to_write))
     return return_value(values.W_Fixnum(stop - start), env, cont)
 
-
-@expose("jit-debug", simple=False)
-def enable_debug(args, env, cont):
-    """ Set the jit debugging - completely necessary for some stats to work,
-    most notably assembler counters.
-    """
-    jit_hooks.stats_set_debug(None, True)
-    return return_void(env, cont)
 
 
 # FIXME:
