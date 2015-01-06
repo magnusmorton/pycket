@@ -38,7 +38,7 @@ def make_entry_point(pycketconfig=None):
         env.module_env.add_module(module_name, ast)
         try:
             from rpython.rlib import jit_hooks
-            jit_hooks.stats_set_debug(None, True)
+#            jit_hooks.stats_set_debug(None, True)
             val = interpret_module(ast, env)
         finally:
             from rpython.rlib import jit_hooks
