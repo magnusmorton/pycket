@@ -11,4 +11,6 @@
     (foldl (lambda (s x) (+ s x)) 0 _list)))
 
 
+
 (time  (enumFromTo 1 10000000)))
+

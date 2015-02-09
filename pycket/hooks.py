@@ -9,6 +9,8 @@ class PycketJitInterface(JitHookInterface):
 
     def __init__(self, analysis):
         """ sets the analysis to use"""
+        print "NEW ANALYSIS"
+        print "============"
         super(PycketJitInterface, self).__init__()
         self.analysis = analysis
         
@@ -19,9 +21,7 @@ class PycketJitInterface(JitHookInterface):
         self.analysis.set_trace(debug_info.operations)
         print "TRACE COST: "
         print str(self.analysis.cost())
-        print "OPS"
-        for op in debug_info.operations:
-            print op
+
 
 
     def after_compile_bridge(self, debug_info):
@@ -31,8 +31,6 @@ class PycketJitInterface(JitHookInterface):
         self.analysis.set_trace(debug_info.operations)
         print "TRACE COST: "
         print str(self.analysis.cost())
-        print "OPS"
-        for op in debug_info.operations:
-            print op
+
 
         
