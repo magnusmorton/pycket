@@ -18,6 +18,11 @@ class PycketJitInterface(JitHookInterface):
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
         print "LOOP TOKEN: ", debug_info.looptoken.__repr__()
+        for op in debug_info.operations:
+            if op.getopname() == "label":
+                print "label"
+            if op.getopname() == "jump":
+                print "jump"
         self.analysis.set_trace(debug_info.operations)
         print "TRACE COST: "
         print str(self.analysis.cost())
