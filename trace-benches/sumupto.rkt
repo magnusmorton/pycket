@@ -11,4 +11,4 @@
     (foldl (lambda (s x) (+ s x)) 0 _list)))
 
 
-(time (printf "~a\n" (sum  (enumFromTo 1 10000000))))
+(time  (enumFromTo 1 10000000)))
