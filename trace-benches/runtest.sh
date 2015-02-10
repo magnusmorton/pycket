@@ -7,7 +7,7 @@ do
     echo $bench
     for i in `seq 10`
     do
-	PYPYLOG=jit-log-opt:logfile_sumupto  ./pycket-c trace-benches/sumupto.rkt $bench  >> sumupto${bench}
+	PYPYLOG=jit-log-opt:logfile_sumupto  ./pycket-c trace-benches/sumupto.rkt $bench  > sumupto${bench}
     done
 done
 exit 0 
