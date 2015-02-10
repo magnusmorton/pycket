@@ -21,14 +21,14 @@ class PycketJitInterface(JitHookInterface):
         start_pos = 0
         for i, op in enumerate(debug_info.operations):
             if op.getopname() == "label":
-                tt = op.getdescr()
-                print "TT: ", tt.repr_of_descr()
                 if current_label is not None:
+                    print "TT: ", current_label.getdescr().repr_of_descr()
                     self.analysis.set_trace(debug_info.operations[start_pos:i])
                     print "COST: ", str(self.analysis.cost())
                 current_label = op
                 start_pos = i
             if op.getopname() == "jump":
+                print "TT: ", current_label.getdescr().repr_of_descr()
                 self.analysis.set_trace(debug_info.operations[start_pos:i])
                 print "COST: ",  str(self.analysis.cost())
 
