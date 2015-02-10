@@ -1,5 +1,6 @@
 from rpython.rlib import jit_hooks
 from rpython.rlib.jit import JitHookInterface, Counters
+from rpython.rlib.objectmodel import compute_unique_id, current_object_addr_as_int
 
 
 from pycket.error import SchemeException
@@ -18,14 +19,24 @@ class PycketJitInterface(JitHookInterface):
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
         print "LOOP TOKEN: ", debug_info.looptoken.__repr__()
-        for op in debug_info.operations:
+        
+               
+        # assume first instruction is label
+        current_label = None
+        start_pos = 0
+        for i, op in enumerate(debug_info.operations):
             if op.getopname() == "label":
-                print "label"
+                tt = op.getdescr()
+                print "TT: ", tt.repr_of_descr()
+                if current_label is not None:
+                    self.analysis.set_trace(debug_info.operations[start_pos:i])
+                    print "COST: ", str(self.analysis.cost())
+                current_label = op
+                start_pos = i
             if op.getopname() == "jump":
-                print "jump"
-        self.analysis.set_trace(debug_info.operations)
-        print "TRACE COST: "
-        print str(self.analysis.cost())
+                self.analysis.set_trace(debug_info.operations[start_pos:i])
+                print "COST: ",  str(self.analysis.cost())
+
 
 
 
