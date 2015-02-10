@@ -10,17 +10,12 @@ class PycketJitInterface(JitHookInterface):
 
     def __init__(self, analysis):
         """ sets the analysis to use"""
-        print "NEW ANALYSIS"
-        print "============"
         super(PycketJitInterface, self).__init__()
         self.analysis = analysis
         
 
     def after_compile(self, debug_info):
         print "AFTER COMPILE"
-        print "LOOP TOKEN: ", debug_info.looptoken.__repr__()
-        
-               
         # assume first instruction is label
         current_label = None
         start_pos = 0
@@ -43,10 +38,10 @@ class PycketJitInterface(JitHookInterface):
     def after_compile_bridge(self, debug_info):
         # in the benchmarks I use, hopefully I won't see this
         print "BRIDGE!! "
-        print "LOOP TOKEN: ", debug_info.looptoken.__repr__()
+        print "GUARD: ", compute_unique_id(debug_info.fail_descr)
+
         self.analysis.set_trace(debug_info.operations)
-        print "TRACE COST: "
-        print str(self.analysis.cost())
+        print "COST: ", str(self.analysis.cost())
 
 
         
