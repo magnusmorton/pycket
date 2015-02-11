@@ -23,14 +23,12 @@ class PycketJitInterface(JitHookInterface):
             if op.getopname() == "label":
                 if current_label is not None:
                     print "TT: ", current_label.getdescr().repr_of_descr()
-                    self.analysis.set_trace(debug_info.operations[start_pos:i])
-                    print "COST: ", str(self.analysis.cost())
+                    print "COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
                 current_label = op
                 start_pos = i
             if op.getopname() == "jump":
                 print "TT: ", current_label.getdescr().repr_of_descr()
-                self.analysis.set_trace(debug_info.operations[start_pos:i])
-                print "COST: ",  str(self.analysis.cost())
+                print "COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
 
 
 
@@ -39,9 +37,7 @@ class PycketJitInterface(JitHookInterface):
         # in the benchmarks I use, hopefully I won't see this
         print "BRIDGE!! "
         print "GUARD: ", compute_unique_id(debug_info.fail_descr)
-
-        self.analysis.set_trace(debug_info.operations)
-        print "COST: ", str(self.analysis.cost())
+        print "COST: ", str(self.analysis.cost(debug_info.operations))
 
 
         
