@@ -5,7 +5,6 @@ class Simple(Analysis):
     def cost(self, trace):
         """ computes the cost of the analysis"""
         count  = 0
-        print "calculating cost"
         for instruction in trace:
             """TODO: test this"""
             if instruction.getopname() != "debug_merge_point":
