@@ -6,7 +6,7 @@ do
     echo $bench
     for i in `seq 10`
     do
-	PYPYLOG=jit-log-opt:logfile_bubble  ./pycket-c trace-benches/bubble.rkt $bench  >> bubble${bench}
+	./pycket-c trace-benches/mergesort.rkt $bench  >> merge${bench}
     done
 done
 exit 0 
