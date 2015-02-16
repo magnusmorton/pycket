@@ -27,8 +27,9 @@ class PycketJitInterface(JitHookInterface):
                 current_label = op
                 start_pos = i
             if op.getopname() == "jump":
-                print "TT: ", current_label.getdescr().repr_of_descr()
-                print "COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
+                if current_label is not None:
+                    print "TT: ", current_label.getdescr().repr_of_descr()
+                    print "COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
 
 
 
