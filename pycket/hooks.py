@@ -22,26 +22,17 @@ class PycketJitInterface(JitHookInterface):
         for i, op in enumerate(debug_info.operations):
             if op.getopname() == "label":
                 if current_label is not None:
-                    print "HASH: ", loop_hash(debug_info.operations[start_pos:i])
-                    print "TT: ", current_label.getdescr().repr_of_descr()
-                    print "COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
+                    print "LOOP - HASH: ", loop_hash(debug_info.operations[start_pos:i]), " TT: ", current_label.getdescr().repr_of_descr(), " COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
                 current_label = op
                 start_pos = i
             if op.getopname() == "jump":
                 if current_label is not None:
-                    print "HASH: ", loop_hash(debug_info.operations[start_pos:i]) 
-                    print "TT: ", current_label.getdescr().repr_of_descr()
-                    print "COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
-
-
+                    print "LOOP - HASH: ", loop_hash(debug_info.operations[start_pos:i]), " TT: ", current_label.getdescr().repr_of_descr(), " COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
 
 
     def after_compile_bridge(self, debug_info):
         # in the benchmarks I use, hopefully I won't see this
-        print "BRIDGE "
-        print "HASH: ", loop_hash(debug_info.operations)
-        print "GUARD: ", compute_unique_id(debug_info.fail_descr)
-        print "COST: ", str(self.analysis.cost(debug_info.operations))
+        print "BRIDGE -  HASH: ", loop_hash(debug_info.operations), " GUARD: ", compute_unique_id(debug_info.fail_descr), " COST: ", str(self.analysis.cost(debug_info.operations))
 
 
 
