@@ -15,7 +15,6 @@ class PycketJitInterface(JitHookInterface):
         
 
     def after_compile(self, debug_info):
-        print "LOOP"
         # assume first instruction is label
         current_label = None
         start_pos = 0
