@@ -52,8 +52,7 @@ def make_entry_point(pycketconfig=None):
                 print "loop ", ll_times[i].type, ll_times[i].number, ll_times[i].counter
             
             tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
-            print "TRACING: "
-            print tr_time
+            print "TRACING: ", tr_time
             print "END ANALYSIS"
             from pycket.prims.input_output import shutdown
             shutdown(env)
