@@ -1,6 +1,6 @@
 #lang pycket #:stdlib
 
-
+(define SIZE (string->number (vector-ref (current-command-line-arguments) 0 )))
 
 (define enumFromTo
   (lambda (m n)
@@ -12,5 +12,5 @@
 
 
 
-(time  (enumFromTo 1 10000000))
+(time  (enumFromTo 1 SIZE))
 
