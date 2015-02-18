@@ -15,7 +15,6 @@ class PycketJitInterface(JitHookInterface):
         
 
     def after_compile(self, debug_info):
-        # assume first instruction is label
         current_label = None
         start_pos = 0
         for i, op in enumerate(debug_info.operations):
@@ -30,7 +29,6 @@ class PycketJitInterface(JitHookInterface):
 
 
     def after_compile_bridge(self, debug_info):
-        # in the benchmarks I use, hopefully I won't see this
         print "BRIDGE -  HASH: ", loop_hash(debug_info.operations), " GUARD: ", compute_unique_id(debug_info.fail_descr), " COST: ", str(self.analysis.cost(debug_info.operations))
 
 
