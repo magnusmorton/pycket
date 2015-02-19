@@ -1,27 +1,11 @@
 from rpython.rlib import jit_hooks
 from rpython.rlib.jit import JitHookInterface, Counters
 from rpython.rlib.objectmodel import compute_unique_id, current_object_addr_as_int, compute_hash
-
+from pycket.trace import Trace, Bridge
 
 from pycket.error import SchemeException
 
-class Trace(object):
-    def __init__(self, ops):
-        self.operations = ops
-        
-    def __hash__(self):
-        hash_num = 0
-        for op in self.operations:
-            hash_num *= 251
-            hash_num += compute_hash(op.__class__.__name__)
-        return hash_num
 
-class Bridge(Trace):
-    def __init__(self, ops, guard):
-        # for some reason this doesn't work
-        #super(Bridge, self).__init__()
-        self.ops = ops
-        self.guard = guard
 
 trace_list = []
 
@@ -34,7 +18,7 @@ class PycketJitInterface(JitHookInterface):
         
 
     def after_compile(self, debug_info):
-       trace_list.append(Trace(debug_info.operations))
+        trace_list.append(Trace(debug_info.operations))
 
     def after_compile_bridge(self, debug_info):
         trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
