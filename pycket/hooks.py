@@ -5,8 +5,6 @@ from pycket.trace import Trace, Bridge
 
 from pycket.error import SchemeException
 
-
-
 trace_list = []
 
 class PycketJitInterface(JitHookInterface):
@@ -19,9 +17,27 @@ class PycketJitInterface(JitHookInterface):
 
     def after_compile(self, debug_info):
         trace_list.append(Trace(debug_info.operations))
+        print "LOOP"
+
+        for op in debug_info.operations:
+            if op.getopname() == "label":
+                print "LABEL: ", op.getdescr().repr_of_descr()
+            elif op.getopname()[0:4] == "guard":
+                print "GUARD: ", op.getdescr().repr_of_descr
+            else:
+                print op
 
     def after_compile_bridge(self, debug_info):
         trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
+        print "LOOP"
+        for op in debug_info.operations:
+            if op.getopname() == "label":
+                print "LABEL: ", op.getdescr().repr_of_descr()
+            elif op.getopname() =="guard":
+                print "GUARD: ", op
+            else:
+                print op
+
 
 #        print "BRIDGE -  HASH: ", loop_hash(debug_info.operations), " GUARD: ", compute_unique_id(debug_info.fail_descr), " COST: ", str(self.analysis.cost(debug_info.operations))
 
