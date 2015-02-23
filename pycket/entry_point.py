@@ -3,19 +3,14 @@
 #
 # _____ Define and setup target ___
 
-from rpython.jit.metainterp.jitdriver import JitDriverStaticData
-jitsd = JitDriverStaticData()
-
 def make_entry_point(pycketconfig=None):
     from pycket.expand import load_json_ast_rpython, expand_to_ast, PermException, ModTable
-    from pycket.interpreter import interpret_one, ToplevelEnv, interpret_module, driver_one_state
+    from pycket.interpreter import interpret_one, ToplevelEnv, interpret_module
     from pycket.error import SchemeException
     from pycket.option_helper import parse_args, ensure_json_ast
     from pycket.values_string import W_String
-    
 
     from rpython.rlib import jit
-    
     def entry_point(argv):
         try:
             return actual_entry(argv)
@@ -25,9 +20,8 @@ def make_entry_point(pycketconfig=None):
             raise # to see interpreter-level traceback
 
     def actual_entry(argv):
-        
         jit.set_param(None, "trace_limit", 1000000)
-        
+
         config, names, args, retval = parse_args(argv)
         if retval != 0 or config is None:
             return retval
@@ -59,8 +53,6 @@ def make_entry_point(pycketconfig=None):
             
             tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
             print "TRACING: ", tr_time
-            from pycket.hooks import hooks
-            print hooks.trace_list
             print "END ANALYSIS"
             from pycket.prims.input_output import shutdown
             shutdown(env)
