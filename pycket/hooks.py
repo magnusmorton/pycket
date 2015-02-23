@@ -22,21 +22,23 @@ class PycketJitInterface(JitHookInterface):
         for op in debug_info.operations:
             if op.getopname() == "label":
                 print "LABEL: ", op.getdescr().repr_of_descr()
-            elif op.getopname()[0:4] == "guard":
-                print "GUARD: ", op.getdescr().repr_of_descr
+            elif op.getopname()[0:5] == "guard":
+                print "GUARD: ", compute_unique_id(op.getdescr())
             else:
                 print op
+        print "END TRACE"
 
     def after_compile_bridge(self, debug_info):
         trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
-        print "LOOP"
+        print "BRIDGE: ", compute_unique_id(debug_info.fail_descr)
         for op in debug_info.operations:
             if op.getopname() == "label":
                 print "LABEL: ", op.getdescr().repr_of_descr()
-            elif op.getopname() =="guard":
-                print "GUARD: ", op
+            elif op.getopname()[0:5] == "guard":
+                print "GUARD: ", compute_unique_id(op.getdescr())
             else:
                 print op
+        print "END TRACE"
 
 
 #        print "BRIDGE -  HASH: ", loop_hash(debug_info.operations), " GUARD: ", compute_unique_id(debug_info.fail_descr), " COST: ", str(self.analysis.cost(debug_info.operations))
