@@ -38,7 +38,7 @@ class Trace(object):
                 if current_label:
                     fragments.append(Fragment(self.ops[start_pos:], current_label, found_guards))
             if tokens[0] == "GUARD:":
-                guard = tokens[1]
+                guard = int(tokens[1])
                 if guard in guards:
                     # store the index of the guard from the start of the trace
                     found_guards[guard] = i - start_pos
@@ -63,6 +63,12 @@ class Fragment(object):
 
     def cost(self):
         return len(filter( lambda x: x != "DEBUG_MERGE_POINT_OP",self.ops))
+    
+    def cost2guard(self, guard):
+        """
+        """
+        return len(filter( lambda x: x != "DEBUG_MERGE_POINT_OP",self.ops[0:self.guards[guard]]))
+            
 
     def __hash__(self):
         hash_num = 0
@@ -119,7 +125,7 @@ for arg in sys.argv[1:]:
                 if m_counts.group(1) == 'b':
                     guards.append(int(m_counts.group("fragment")))
             line = f.readline().rstrip()
-    print traces[0].ops
+   
     
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
@@ -131,15 +137,20 @@ for arg in sys.argv[1:]:
         # TODO: count bridge labels
         if key in frags:
             frag = frags[key]
+            print "GUARDS", frag.guards
+            for key2,value2 in counts.iteritems():
+                if key2 in frag.guards:
+                    guard_cost = frag.cost2guard(key2)
+                    value = value - value2
+                    eqn[hash(frag) + 3] = value2
+                    costs[hash(frag) + 3] = guard_cost
             eqn[hash(frag)] =  value
             costs[hash(frag)] = frag.cost()
     times.append(reduce(lambda x, y: x+y, run_times) / float(len(run_times)))
     print eqn
     values.append(eqn)
 
-print len(values)
-print values
-pdb.set_trace()
+
 # need max length
 max_len = 0
 for val in values:
@@ -148,7 +159,7 @@ for val in values:
 print max_len
 
 # need ordered keys
-
+pdb.set_trace()
 coeffs = []
 for eqn in values:
     sorted_eqn = [value for (key, value) in sorted(eqn.items())]
