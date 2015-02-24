@@ -4,6 +4,7 @@ import operator
 import numpy as np
 import numpy.linalg as linalg
 from sets import Set
+import pdb
 
 loop_re = re.compile("LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*)")
 bridge_re = re.compile("BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
@@ -18,12 +19,6 @@ class Trace(object):
     def __init__(self, ops):
         self.ops = ops
 
-    def __hash__(self):
-        hash_num = 0
-        for op in self.ops:
-            hash_num *= 251
-            hash_num += hash(op)
-        return hash_num
     def __eq__(self, other):
         return hash(self) == hash(other)
 
@@ -57,7 +52,7 @@ class Bridge(Trace):
 
     def get_fragments(self, guards):
         # just use the bridge's guard id as a label
-        return super(Bridge, self).get_fragments(self, guards, self.guard)
+        return super(Bridge, self).get_fragments(guards, self.guard)
 
 class Fragment(object):
     def __init__(self, ops, label, guards):
@@ -73,7 +68,7 @@ class Fragment(object):
         hash_num = 0
         for op in self.ops:
             hash_num *= 251
-            hash_num += hash(op)
+            hash_num += hash(op.split()[0])
         return hash_num
 
 def build_trace(fd, guard=0):
@@ -114,6 +109,7 @@ for arg in sys.argv[1:]:
                 traces.append(build_trace(f))
             elif line[0:6] == 'BRIDGE':
                 in_loop = False
+                tokens = line.split()
                 guard = tokens[1]
                 traces.append(build_trace(f, guard))
             if m_times:
@@ -127,7 +123,8 @@ for arg in sys.argv[1:]:
     
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
-    print frags
+    print len(frags)
+    
 
     eqn = {}
     for key, value in counts.iteritems():
@@ -142,7 +139,7 @@ for arg in sys.argv[1:]:
 
 print len(values)
 print values
-
+pdb.set_trace()
 # need max length
 max_len = 0
 for val in values:
