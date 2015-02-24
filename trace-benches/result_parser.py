@@ -93,7 +93,6 @@ def build_trace(fd, guard=0):
 
 #TODO: write a proper parser
 for arg in sys.argv[1:]:
-    print arg
     run = {}
     counts = {}
     run_times = [] 
@@ -129,15 +128,12 @@ for arg in sys.argv[1:]:
     
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
-    print len(frags)
-    
-
+  
     eqn = {}
     for key, value in counts.iteritems():
         # TODO: count bridge labels
         if key in frags:
             frag = frags[key]
-            print "GUARDS", frag.guards
             for key2,value2 in counts.iteritems():
                 if key2 in frag.guards:
                     guard_cost = frag.cost2guard(key2)
@@ -147,7 +143,6 @@ for arg in sys.argv[1:]:
             eqn[hash(frag)] =  value
             costs[hash(frag)] = frag.cost()
     times.append(reduce(lambda x, y: x+y, run_times) / float(len(run_times)))
-    print eqn
     values.append(eqn)
 
 
@@ -156,7 +151,6 @@ max_len = 0
 for val in values:
     if len(val) > max_len:
         max_len = len(val)
-print max_len
 
 # need ordered keys
 pdb.set_trace()
@@ -170,13 +164,11 @@ for eqn in values:
 
 a = np.array(coeffs)
 b = np.array(times)
-print a
-print b
+
 
 # we are probably overconstrained
 x = linalg.lstsq(a, b, 0)
 
-print x
 
 sorted_costs = [value for (key, value) in sorted(costs.items())]
                 

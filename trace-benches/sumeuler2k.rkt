@@ -2,6 +2,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Sum of Euler's totient function
+(define SIZE (string->number (vector-ref (current-command-line-arguments) 0 )))
 
 (define enumFromTo
   (lambda (m n)
@@ -25,4 +26,4 @@
 
 ;; timed call
 (printf "(sum_totient 1 2000)\n")
-(time (printf "~a\n" (sum_totient 1 2000)))
+(time (printf "~a\n" (sum_totient 1 SIZE)))
