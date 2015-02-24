@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-for bench in "100" "500" "1000" "1500" "2000" "2500" 
+for bench in  `seq 10000 500 20000`
 do
     echo $bench
     for i in `seq 10`

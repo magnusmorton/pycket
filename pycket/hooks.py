@@ -17,7 +17,7 @@ class PycketJitInterface(JitHookInterface):
 
     def after_compile(self, debug_info):
         trace_list.append(Trace(debug_info.operations))
-        print "LOOP"
+        print "LOOP", debug_info.looptoken.repr_of_descr()
 
         for op in debug_info.operations:
             if op.getopname() == "label":
