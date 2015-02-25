@@ -27,6 +27,9 @@ class PycketJitInterface(JitHookInterface):
             else:
                 print op
         print "END TRACE"
+        print "ASSEMBLY", debug_info.asminfo.asmlen,
+        print "from ops:", len(debug_info.operations)
+        
 
     def after_compile_bridge(self, debug_info):
         trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
