@@ -7,7 +7,7 @@ do
     echo $bench
     for i in `seq 10`
     do
-	./pycket-c trace-benches/sumupto.rkt $bench  >> sumupto${bench}
+	(perf stat ./pycket-c trace-benches/sumupto.rkt $bench)  &>> sumupto${bench}
     done
 done
 exit 0 

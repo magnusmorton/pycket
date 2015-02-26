@@ -1,5 +1,6 @@
 import re
 import sys
+import copy
 import operator
 import numpy as np
 from scipy.optimize import nnls
@@ -44,7 +45,7 @@ loop_re = re.compile("LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*
 bridge_re = re.compile("BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
 target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
 counts_re = re.compile("loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
-times_re = re.compile("cpu time: (\d*) real time: \d* gc time: \d*")
+times_re = re.compile("\s(\d*\.d*) seconds time elapsed\s*")
 looptoken_re = re.compile("<Loop(\d*)>")
 
 values = []
@@ -191,7 +192,7 @@ for arg in sys.argv[1:]:
                 backend_time =  1000 * float(line.split()[1])
                 #run_times[-1] -= backend_time
             if m_times:
-                print "time:", int(m_times.group(1))
+                print "time:", float(m_times.group(1))
                 run_times.append(int(m_times.group(1)))
             if m_counts:
                 count = float(m_counts.group("count"))
@@ -240,16 +241,16 @@ for arg in sys.argv[1:]:
     values.append(eqn)
 
 
-# assume largest dict is the last one
-for val in values:
-    assert len(val) <= len(values[-1])
-largest = values[-1]
 
-# set missing traces to 0
+
+max_len = 0
 for val in values:
-    for key in largest:
-        if key not in val:
-            val[key] = 0
+    if len(val) > max_len:
+        max_len = len(val)
+        longest = val
+
+zero_longest = {key:0 for key in val}
+values = [dict(zero_longest.items() + val.items()) for val in values]
 
 # need values in key order
 coeffs = [[value for (key, value) in sorted(eqn.items())] for eqn in values]    
