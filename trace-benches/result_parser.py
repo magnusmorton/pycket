@@ -2,7 +2,8 @@ import re
 import sys
 import operator
 import numpy as np
-import numpy.linalg as linalg
+from scipy.optimize import nnls
+from scipy.linalg import solve
 from sets import Set
 import pdb
 
@@ -182,18 +183,24 @@ for arg in sys.argv[1:]:
                 tokens = line.split()
                 guard = tokens[1]
                 traces.append(build_trace(f, guard=guard))
-            elif line[0:8] == "TRACING":
-                tracing_time = float(line.split(1))
-            elif line[0:8] == "BACKEND":
-                backend_time = float(line.split(1))
+            elif line[0:7] == "TRACING":
+                tracing_time = 1000 *  float(line.split()[1])
+                #run_times[-1] -= tracing_time
+                print "tr", tracing_time
+            elif line[0:7] == "BACKEND":
+                backend_time =  1000 * float(line.split()[1])
+                #run_times[-1] -= backend_time
             if m_times:
-                run_times.append(int(m_times.group(1)) - backend_time - tracing_time)
+                print "time:", int(m_times.group(1))
+                run_times.append(int(m_times.group(1)))
             if m_counts:
-                if m_counts.group(1) == 'e':
-                     entry_points[int(m_counts.group("fragment"))] = int(m_counts.group("count"))
-                counts[int(m_counts.group("fragment"))] = int(m_counts.group("count"))
-                if m_counts.group(1) == 'b':
-                    guards.append(int(m_counts.group("fragment")))
+                count = float(m_counts.group("count"))
+                if count > 10:
+                    if m_counts.group(1) == 'e':
+                        entry_points[int(m_counts.group("fragment"))] = count
+                    counts[int(m_counts.group("fragment"))] = count
+                    if m_counts.group(1) == 'b':
+                        guards.append(int(m_counts.group("fragment")))
             line = f.readline().rstrip()
    
     
@@ -202,58 +209,62 @@ for arg in sys.argv[1:]:
   
     eqn = {}
     for key, value in counts.iteritems():
-        # TODO: count bridge labels
-        if key in frags:
-            frag = frags[key]
-            for key2,value2 in counts.iteritems():
-                if key2 in frag.guards:
-                    guard_cost = frag.cost2guard(key2)
-                    value = value - value2
-                    eqn[hash(frag) + 3] = value2
-                    costs[hash(frag) + 3] = guard_cost
-            eqn[hash(frag)] =  value
-            costs[hash(frag)] = frag.cost()
+        if value:
+            if key in frags:
+                frag = frags[key]
+                for key2,value2 in counts.iteritems():
+                    if key2 in frag.guards:
+                        guard_cost = frag.cost2guard(key2)
+                        value = value - value2
+                        eqn[hash(frag) + 3] = value2
+                        costs[hash(frag) + 3] = guard_cost
+                eqn[hash(frag)] =  value
+                costs[hash(frag)] = frag.cost()
 
     # special case for loops with no labels
     if len(frags) > len(counts):
         for key, value in frags.iteritems():
             if key in entry_points:
                 count = entry_points[key]
-                for key2,value2 in counts.iteritems():
-                    if key2 in frag.guards:
-                        guard_cost = frag.cost2guard(key2)
-                        count = count - value2
-                        eqn[hash(value) + 3] = value2
-                        costs[hash(value) + 3] = guard_cost
+                if count:
+                    for key2,value2 in counts.iteritems():
+                        if key2 in frag.guards:
+                            guard_cost = frag.cost2guard(key2)
+                            count = count - value2
+                            eqn[hash(value) + 3] = value2
+                            costs[hash(value) + 3] = guard_cost
+                    eqn[hash(value)] = count
+                    costs[hash(frag)] = frag.cost()
                 
     times.append(reduce(lambda x, y: x+y, run_times) / float(len(run_times)))
     values.append(eqn)
 
 
-# need max length
-max_len = 0
+# assume largest dict is the last one
 for val in values:
-    if len(val) > max_len:
-        max_len = len(val)
-# need ordered keys
-coeffs = []
-for eqn in values:
-    sorted_eqn = [value for (key, value) in sorted(eqn.items())]
-    #pad with 0s
-    sorted_eqn.extend([0]* (max_len - len(sorted_eqn)))
-    coeffs.append(sorted_eqn)
-    
+    assert len(val) <= len(values[-1])
+largest = values[-1]
+
+# set missing traces to 0
+for val in values:
+    for key in largest:
+        if key not in val:
+            val[key] = 0
+
+# need values in key order
+coeffs = [[value for (key, value) in sorted(eqn.items())] for eqn in values]    
 
 a = np.array(coeffs)
 b = np.array(times)
 
+
 print a
 print b
 # we are probably overconstrained
-x = linalg.lstsq(a, b, 0)
+x = nnls(a, b)
 
 print x
-
+pdb.set_trace()
 sorted_costs = [value for (key, value) in sorted(costs.items())]
                 
 for i, cost in enumerate(sorted_costs):

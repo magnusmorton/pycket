@@ -21,7 +21,7 @@ def make_entry_point(pycketconfig=None):
 
     def actual_entry(argv):
         jit.set_param(None, "trace_limit", 1000000)
-
+        
         config, names, args, retval = parse_args(argv)
         if retval != 0 or config is None:
             return retval
@@ -52,7 +52,9 @@ def make_entry_point(pycketconfig=None):
                 print "loop ", ll_times[i].type, ll_times[i].number, ll_times[i].counter
             
             tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
-            print "TRACING: ", tr_time
+            b_time = jit_hooks.stats_get_times_value(None, Counters.BACKEND)
+            print "TRACING:", tr_time
+            print "BACKEND:", b_time
             print "END ANALYSIS"
             from pycket.prims.input_output import shutdown
             shutdown(env)
