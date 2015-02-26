@@ -14,15 +14,9 @@
 
 
 (define (cross-product l r)
-  (if (= 0 (length l)) null
-      (cons (foldl (lambda (acc  num) (+ acc (* (car l) num))) 0 r) (cross-product (cdr l) r))
-      )
-)
-
-
-
+  (map (lambda (lnum) (foldl (lambda (acc rnum) (+ acc ( * lnum rnum ))) 0 r)) l))
 
 
 
 ;; dot-product works on sequences such as vectors:
-(time  (cross-product vec1 vec2))
+(time   (cross-product vec1 vec2))
