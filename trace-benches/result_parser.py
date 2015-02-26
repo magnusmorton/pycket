@@ -45,6 +45,7 @@ target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
 counts_re = re.compile("loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
 times_re = re.compile("cpu time: (\d*) real time: \d* gc time: \d*")
 looptoken_re = re.compile("<Loop(\d*)>")
+
 values = []
 times = []
 costs = {}
@@ -93,8 +94,8 @@ class Trace(object):
             if tokens[0] == "JUMP_OP":
                 if current_label:
                     fragments.append(Fragment(self.ops[start_pos:], current_label, found_guards))
-                # else:
-                #     fragments.append(Fragment(self.ops,self.token, found_guards))
+                else:
+                    fragments.append(Fragment(self.ops,self.token, found_guards))
             if tokens[0] == "GUARD:":
                 guard = int(tokens[1])
                 if guard in guards:
@@ -159,6 +160,8 @@ for arg in sys.argv[1:]:
     lines = []
     guards = []
     entry_points = {}
+    tracing_time = 0
+    backend_time = 0
     with open(arg, 'r') as f:
         line = f.readline().rstrip()
         while line:
@@ -179,8 +182,12 @@ for arg in sys.argv[1:]:
                 tokens = line.split()
                 guard = tokens[1]
                 traces.append(build_trace(f, guard=guard))
+            elif line[0:8] == "TRACING":
+                tracing_time = float(line.split(1))
+            elif line[0:8] == "BACKEND":
+                backend_time = float(line.split(1))
             if m_times:
-                run_times.append(int(m_times.group(1)))
+                run_times.append(int(m_times.group(1)) - backend_time - tracing_time)
             if m_counts:
                 if m_counts.group(1) == 'e':
                      entry_points[int(m_counts.group("fragment"))] = int(m_counts.group("count"))
@@ -240,10 +247,12 @@ for eqn in values:
 a = np.array(coeffs)
 b = np.array(times)
 
-
+print a
+print b
 # we are probably overconstrained
 x = linalg.lstsq(a, b, 0)
 
+print x
 
 sorted_costs = [value for (key, value) in sorted(costs.items())]
                 
