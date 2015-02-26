@@ -19,4 +19,4 @@
 
 
 ;; dot-product works on sequences such as vectors:
-(time   (cross-product vec1 vec2))
+(cross-product vec1 vec2)

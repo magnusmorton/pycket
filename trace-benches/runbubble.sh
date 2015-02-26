@@ -7,7 +7,7 @@ do
     echo $bench
     for i in `seq 10`
     do
-	./pycket-c trace-benches/bubble.rkt $bench  >> bubble${bench}
+	(perf stat ./pycket-c trace-benches/bubble.rkt $bench)  &>> bubble${bench}
     done
 done
 exit 0 

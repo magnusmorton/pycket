@@ -244,12 +244,13 @@ for arg in sys.argv[1:]:
 
 
 max_len = 0
+longest = None
 for val in values:
     if len(val) > max_len:
         max_len = len(val)
         longest = val
 
-zero_longest = {key:0 for key in val}
+zero_longest = {key:0 for key in longest}
 values = [dict(zero_longest.items() + val.items()) for val in values]
 
 # need values in key order
