@@ -45,7 +45,7 @@ loop_re = re.compile("LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*
 bridge_re = re.compile("BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
 target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
 counts_re = re.compile("loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
-times_re = re.compile("\s(\d*\.d*) seconds time elapsed\s*")
+times_re = re.compile("\s*(\d*\.\d*) seconds time elapsed")
 looptoken_re = re.compile("<Loop(\d*)>")
 
 values = []
@@ -165,7 +165,7 @@ for arg in sys.argv[1:]:
     tracing_time = 0
     backend_time = 0
     with open(arg, 'r') as f:
-        line = f.readline().rstrip()
+        line = f.readline()
         while line:
             if line == "BEGIN":
                 # we only need the last instance of these
@@ -174,7 +174,7 @@ for arg in sys.argv[1:]:
                 guards = []
                 entry_points = {}
             m_times = times_re.match(line)
-            m_counts = counts_re.match(line)
+            m_counts = counts_re.match(line.rstrip())
             if line[0:4] == 'LOOP':
                 tokens = line.split()
                 looptoken = int(looptoken_re.match(tokens[1]).group(1))
@@ -187,22 +187,20 @@ for arg in sys.argv[1:]:
             elif line[0:7] == "TRACING":
                 tracing_time = 1000 *  float(line.split()[1])
                 #run_times[-1] -= tracing_time
-                print "tr", tracing_time
             elif line[0:7] == "BACKEND":
                 backend_time =  1000 * float(line.split()[1])
                 #run_times[-1] -= backend_time
             if m_times:
-                print "time:", float(m_times.group(1))
-                run_times.append(int(m_times.group(1)))
+                run_times.append(float(m_times.group(1)) * 1000000)
             if m_counts:
                 count = float(m_counts.group("count"))
-                if count > 10:
+                if count > 0:
                     if m_counts.group(1) == 'e':
                         entry_points[int(m_counts.group("fragment"))] = count
                     counts[int(m_counts.group("fragment"))] = count
                     if m_counts.group(1) == 'b':
                         guards.append(int(m_counts.group("fragment")))
-            line = f.readline().rstrip()
+            line = f.readline()
    
     
     # build fragments for each trace, flatten the list and turn it into a dic
@@ -242,7 +240,7 @@ for arg in sys.argv[1:]:
 
 
 
-
+pdb.set_trace()
 max_len = 0
 longest = None
 for val in values:
@@ -259,14 +257,12 @@ coeffs = [[value for (key, value) in sorted(eqn.items())] for eqn in values]
 a = np.array(coeffs)
 b = np.array(times)
 
-
 print a
 print b
 # we are probably overconstrained
 x = nnls(a, b)
-
-print x
 pdb.set_trace()
+print x
 sorted_costs = [value for (key, value) in sorted(costs.items())]
                 
 for i, cost in enumerate(sorted_costs):

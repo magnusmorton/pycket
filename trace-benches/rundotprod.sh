@@ -7,7 +7,7 @@ do
     echo $bench
     for i in `seq 10`
     do
-	(perf stat ./pycket-c trace-benches/dotproduct.rkt $bench)  >> dot${bench}
+	(perf stat ./pycket-c trace-benches/dotproduct.rkt $bench)  &>> dot${bench}
     done
 done
 exit 0 
