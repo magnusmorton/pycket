@@ -6,6 +6,7 @@ import numpy as np
 from scipy.optimize import nnls
 from scipy.linalg import solve
 from sets import Set
+from scipy.io import savemat
 import pdb
 
 
@@ -51,6 +52,7 @@ looptoken_re = re.compile("<Loop(\d*)>")
 values = []
 times = []
 costs = {}
+run_costs = []
 
 
 def simple_cost(frag, i=None):
@@ -191,7 +193,7 @@ for arg in sys.argv[1:]:
                 backend_time =  1000 * float(line.split()[1])
                 #run_times[-1] -= backend_time
             if m_times:
-                run_times.append(float(m_times.group(1)) * 1000000)
+                run_times.append(float(m_times.group(1)))
             if m_counts:
                 count = float(m_counts.group("count"))
                 if count > 0:
@@ -257,6 +259,9 @@ coeffs = [[value for (key, value) in sorted(eqn.items())] for eqn in values]
 a = np.array(coeffs)
 b = np.array(times)
 
+
+
+savemat("results.mat", {"counts":a, "times":b})
 print a
 print b
 # we are probably overconstrained
@@ -265,6 +270,11 @@ pdb.set_trace()
 print x
 sorted_costs = [value for (key, value) in sorted(costs.items())]
                 
+with open("whole_program.plt", "a") as f:
+    for i,value in enumerate(values):
+        cost = reduce(lambda x, y: x + value[y] * costs[y], value,0)
+        f.write(str(cost) + " " + str(times[i]) + "\n")
+
 for i, cost in enumerate(sorted_costs):
     print x[0][i], cost
 
