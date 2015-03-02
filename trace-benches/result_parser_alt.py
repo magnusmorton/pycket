@@ -209,6 +209,12 @@ for arg in sys.argv[1:]:
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
     for key, value in counts.iteritems():
         if key in frags:
+            frag = frags[key]
+            for key2,value2 in counts.iteritems():
+                if key2 in frag.guards:
+                    guard_cost = frag.cost2guard(key2)
+                    value = value - (value2 + 200)
+                    print "Fragment:", key2, "Cost:", guard_cost, "Count:", value2
             print "Fragment:", key, "Cost:", frag.cost(), "Count:", value
     # eqn = {}
 #     for key, value in counts.iteritems():
