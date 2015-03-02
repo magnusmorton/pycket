@@ -6,7 +6,7 @@
 
 (define (bubble-sort vec)
   (define SIZE-1 (- SIZE 1))
-  (if (let loop ([swapped? #f] [i 0])
+  (if (time (let loop ([swapped? #f] [i 0])
         (if (= i SIZE-1)
             swapped?
             (let ([a (vector-ref vec i)]
@@ -16,7 +16,7 @@
                     (vector-set! vec i b)
                     (vector-set! vec (+ 1 i) a)
                     (loop #t (+ i 1)))
-                  (loop swapped? (+ 1 i))))))
+                  (loop swapped? (+ 1 i)))))))
       (bubble-sort vec)
       #f))
 (let loop ([i 0])
@@ -26,5 +26,5 @@
         (loop (+ 1 i)))
       #f))
 
-(bubble-sort vec)
+(time (bubble-sort vec))
 ;(bubble-sort vec)

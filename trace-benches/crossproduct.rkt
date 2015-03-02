@@ -14,9 +14,13 @@
 
 
 (define (cross-product l r)
-  (map (lambda (lnum) (foldl (lambda (acc rnum) (+ acc ( * lnum rnum ))) 0 r)) l))
+ (map  (lambda (lnum)(time (foldl (lambda (acc rnum) (+ acc ( * lnum rnum ))) 0 r))) l))
 
-
+;; (define (cross-product l r)
+;;     (for/list ([i l]
+;;                [j r])
+;;         (* i j)))
+        
 
 ;; dot-product works on sequences such as vectors:
 (cross-product vec1 vec2)

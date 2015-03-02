@@ -66,7 +66,7 @@ def mem_cost(frag, i=None):
     while j < i:
         op = frag.ops[j].split()[0]
         if op in high_cost:
-            cost += 100
+            cost += 1000
         elif op != "DEBUG_MERGE_POINT_OP":
             cost += 1
         j+=1
@@ -242,7 +242,6 @@ for arg in sys.argv[1:]:
 
 
 
-pdb.set_trace()
 max_len = 0
 longest = None
 for val in values:
@@ -262,14 +261,10 @@ b = np.array(times)
 
 
 savemat("results.mat", {"counts":a, "times":b})
-print a
-print b
 # we are probably overconstrained
 x = nnls(a, b)
-pdb.set_trace()
-print x
-sorted_costs = [value for (key, value) in sorted(costs.items())]
                 
+sorted_costs = [value for (key, value) in sorted(costs.items())]
 with open("whole_program.plt", "a") as f:
     for i,value in enumerate(values):
         cost = reduce(lambda x, y: x + value[y] * costs[y], value,0)
