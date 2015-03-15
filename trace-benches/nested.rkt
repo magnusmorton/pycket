@@ -21,6 +21,6 @@
   (lambda (iter acc)
     (if (> iter numb1)
 	acc
-	(outer (+ iter 1) (time (inner 0 acc))))))
+	(outer (+ iter 1)  (time(inner 0 acc))))))
 
 (time (outer 0 0))
