@@ -46,7 +46,7 @@ loop_re = re.compile("LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*
 bridge_re = re.compile("BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
 target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
 counts_re = re.compile("loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
-times_re = re.compile("\s*(\d*\.\d*) seconds time elapsed")
+times_re = re.compile("cpu time: (\d*) real time: \d* gc time: \d*")
 looptoken_re = re.compile("<Loop(\d*)>")
 
 values = []
@@ -95,6 +95,7 @@ class Trace(object):
                 current_label = int(target_token_re.match(tokens[1]).group('tt_val'))
                 start_pos = i
                 found_guards = {}
+                print "LABEL:", current_label
             if tokens[0] == "JUMP_OP":
                 if current_label:
                     fragments.append(Fragment(self.ops[start_pos:], current_label, found_guards))
@@ -163,18 +164,23 @@ for arg in sys.argv[1:]:
     traces = []
     lines = []
     guards = []
+    this_times = []
     entry_points = {}
     tracing_time = 0
     backend_time = 0
     with open(arg, 'r') as f:
         line = f.readline()
         while line:
-            if line == "BEGIN":
+            if line[0:-1] == "BEGIN":
+                pdb.set_trace()
+                if this_times:
+                    run_times.append(this_times)
                 # we only need the last instance of these
                 counts = {}
                 traces = []
                 guards = []
                 entry_points = {}
+                this_times = []
             m_times = times_re.match(line)
             m_counts = counts_re.match(line.rstrip())
             if line[0:4] == 'LOOP':
@@ -193,7 +199,8 @@ for arg in sys.argv[1:]:
                 backend_time =  1000 * float(line.split()[1])
                 #run_times[-1] -= backend_time
             if m_times:
-                run_times.append(float(m_times.group(1)))
+                this_times.append(float(m_times.group(1)))
+                print "TIME", m_times.group(1)
             if m_counts:
                 count = float(m_counts.group("count"))
                 if count > 0:
@@ -203,8 +210,15 @@ for arg in sys.argv[1:]:
                     if m_counts.group(1) == 'b':
                         guards.append(int(m_counts.group("fragment")))
             line = f.readline()
-   
+        run_times.append(this_times) 
     
+    times_total = [0.] *len(run_times[0])
+    print run_times
+    for times in run_times:
+        for i,time in enumerate(times):
+            times_total[i] += time
+    for time_sum in times_total:
+        print "AVG TIME", time_sum / len(run_times)
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
     for key, value in counts.iteritems():

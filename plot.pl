@@ -1,3 +1,3 @@
 set term png
-set output "simple.png"
+set output 'simnple.png'
 plot 'results.plt'  

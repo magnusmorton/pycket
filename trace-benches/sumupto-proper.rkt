@@ -12,5 +12,5 @@
 
 
 
-(time  (sum(enumFromTo 1 SIZE)))
+(time  (sum (time (enumFromTo 1 SIZE))))
 

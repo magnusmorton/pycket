@@ -23,4 +23,4 @@
 	acc
 	(outer (+ iter 1)  (time(inner 0 acc))))))
 
-(time (outer 0 0))
+(outer 0 0)

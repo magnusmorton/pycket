@@ -23,4 +23,4 @@
 
 
 ;; dot-product works on sequences such as vectors:
-(dot-product vec1 vec2)
+(time (dot-product vec1 vec2))

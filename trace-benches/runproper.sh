@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-for bench in  "10000" "100000" "1000000"
+for bench in  "100000"
 
 do
     echo $bench

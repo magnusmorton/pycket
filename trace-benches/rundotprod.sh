@@ -1,13 +1,13 @@
 #!/bin/bash
 
 
-for bench in   10000 25000 75000 100000
+for bench in   10000 25000 
 
 do
     echo $bench
-    for i in `seq 100`
+    for i in `seq 10`
     do
-	(perf stat ./pycket-c trace-benches/dotproduct.rkt $bench)  &>> dot${bench}
+	./pycket-c trace-benches/dotproduct.rkt $bench  &>> dot${bench}
     done
 done
 exit 0 

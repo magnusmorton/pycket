@@ -1,5 +1,4 @@
 #lang pycket
-;; The Bubble sort benchmark from Strickland et al 2012
 (define SIZE (string->number (vector-ref (current-command-line-arguments) 0 )))
 
 
