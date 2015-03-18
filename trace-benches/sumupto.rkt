@@ -12,5 +12,5 @@
 
 
 
-(enumFromTo 1 SIZE)
+(time (enumFromTo 1 SIZE))
 

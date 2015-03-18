@@ -172,16 +172,12 @@ for arg in sys.argv[1:]:
         line = f.readline()
         while line:
             if line[0:-1] == "BEGIN":
-                pdb.set_trace()
-                if this_times:
-                    run_times.append(this_times)
-                # we only need the last instance of these
                 counts = {}
                 traces = []
                 guards = []
                 entry_points = {}
                 this_times = []
-            m_times = times_re.match(line)
+            m_times = times_re.match(line.rstrip())
             m_counts = counts_re.match(line.rstrip())
             if line[0:4] == 'LOOP':
                 tokens = line.split()
@@ -199,7 +195,7 @@ for arg in sys.argv[1:]:
                 backend_time =  1000 * float(line.split()[1])
                 #run_times[-1] -= backend_time
             if m_times:
-                this_times.append(float(m_times.group(1)))
+                run_times.append(float(m_times.group(1)))
                 print "TIME", m_times.group(1)
             if m_counts:
                 count = float(m_counts.group("count"))
@@ -210,15 +206,8 @@ for arg in sys.argv[1:]:
                     if m_counts.group(1) == 'b':
                         guards.append(int(m_counts.group("fragment")))
             line = f.readline()
-        run_times.append(this_times) 
     
-    times_total = [0.] *len(run_times[0])
-    print run_times
-    for times in run_times:
-        for i,time in enumerate(times):
-            times_total[i] += time
-    for time_sum in times_total:
-        print "AVG TIME", time_sum / len(run_times)
+    print "AVG TIME", sum(run_times) / len(run_times)
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
     for key, value in counts.iteritems():

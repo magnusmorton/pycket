@@ -1,7 +1,7 @@
 #lang pycket #:stdlib
 
 (define SIZE (string->number (vector-ref (current-command-line-arguments) 0 )))
-(define vec (make-vector SIZE))
+(define vec (make-vector (* 2 SIZE)))
 
 (define enumFromTo
   (lambda (m n)
@@ -18,7 +18,7 @@
     (foldl (lambda (s x) (+ s x)) 0 _list)))
 
 (let loop ([i 0])
-  (if (< i SIZE)
+  (if (< i (* 2 SIZE))
       (begin
         (vector-set! vec i (- SIZE i))
         (loop (+ 1 i)))
