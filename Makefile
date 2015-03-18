@@ -1,27 +1,68 @@
-translate-all: translate-jit translate-no-callgraph translate-no-two-state translate-no-loop-opts translate-no-strategies
+#/usr/bin/make -f
 
-translate-jit:
-	./pypy/rpython/bin/rpython -Ojit --batch targetpycket.py
+#
+# Path of pypy checkout
+PYPYPATH ?= pypy
 
-translate-no-prune-env:
-	./pypy/rpython/bin/rpython -Ojit --batch targetpycket.py --no-prune-env
+# Invocation of pytest, defaults to pypy's stuff
+# but may also be `py.test`
+PYTEST ?= $(PYPYPATH)/pytest.py
+RPYTHON ?= $(PYPYPATH)/rpython/bin/rpython --batch
 
-translate-no-two-state:
-	./pypy/rpython/bin/rpython -Ojit --batch targetpycket.py --no-two-state
 
-translate-callgraph:
-	./pypy/rpython/bin/rpython -Ojit --batch targetpycket.py --callgraph
+TRANSLATE_TARGETS := translate-jit translate-no-callgraph translate-no-two-state \
+		translate-no-strategies translate-no-type-size-specialization
 
-translate-no-strategies:
-	./pypy/rpython/bin/rpython -Ojit --batch targetpycket.py --no-strategies
+PYFILES := $(shell find . -name '*.py' -type f)
 
-translate-no-jit:
-	./pypy/rpython/bin/rpython --batch targetpycket.py
+.PHONY: all translate-jit-all $(TRANSLATE_TARGETS) translate-no-jit
+.PHONY: setup test coverage
+
+translate-jit-all: $(TRANSLATE_TARGETS)
+all: translate-jit-all translate-no-jit
+
+
+translate-jit: pycket-c
+translate-no-prune-env: pycket-c-no-prune-env
+translate-no-two-state: pycket-c-no-two-state
+translate-no-callgraph: pycket-c-no-callgraph
+translate-no-strategies: pycket-c-no-strategies
+translate-no-type-size-specialization: pycket-c-no-type-size-specialization
+translate-no-jit: pycket-c-nojit
+
+pycket-c: $(PYFILES)
+	$(RPYTHON) -Ojit targetpycket.py
+
+pycket-c-no-prune-env: $(PYFILES)
+	$(RPYTHON) -Ojit targetpycket.py --no-prune-env
+
+pycket-c-no-two-state: $(PYFILES)
+	$(RPYTHON) -Ojit targetpycket.py --no-two-state
+
+pycket-c-no-callgraph: $(PYFILES)
+	$(RPYTHON) -Ojit targetpycket.py --no-callgraph
+
+pycket-c-no-strategies: $(PYFILES)
+	$(RPYTHON) -Ojit targetpycket.py --no-strategies
+
+pycket-c-no-type-size-specialization: $(PYFILES)
+	$(RPYTHON) -Ojit targetpycket.py --no-type-size-specialization
+
+pycket-c-nojit: $(PYFILES)
+	$(RPYTHON) targetpycket.py
+
 
 setup:
-	raco pkg install -t dir pycket/pycket-lang/ || raco pkg update --link pycket/pycket-lang
-	(cd pypy && hg pull && hg update)
+	raco pkg install -t dir pycket/pycket-lang/ || \
+		raco pkg update --link pycket/pycket-lang
+	hg -R $(PYPYPATH) pull && \
+	hg -R $(PYPYPATH) update
 
-test:
-	(cd pycket && py.test)
+test: $(PYFILES)
+	$(PYTEST) pycket
 
+
+coverage: pycket/test/coverage_report .coverage
+pycket/test/coverage_report .coverage: $(PYFILES)
+	$(PYTEST) pycket --cov pycket \
+		--cov-report=term-missing --cov-report=html

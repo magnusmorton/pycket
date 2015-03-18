@@ -44,15 +44,6 @@ def test_equal():
         '(equal? "abc" "def")',
     )
 
-def test_list_vector_conversion():
-    check_equal(
-        "(vector->list #(1 2 3 4))", "(list 1 2 3 4)",
-        "(vector->list #())", "'()",
-        "(vector->list #(1.1 a))", "(list 1.1 'a)",
-        "#(1 2 3 4)", "(list->vector (list 1 2 3 4))",
-        "#()", "(list->vector '())",
-        "#(1.1 a)", "(list->vector (list 1.1 'a))",
-    )
 
 ###############################################################################
 
@@ -181,42 +172,6 @@ def test_random_seed():
     run("(begin (random-seed 142) (let ((x (random))) (random-seed 142) (= (random) x)))", w_true)
 
 
-def test_flvector(doctest):
-    """
-    ! (require '#%flfxnum '#%unsafe)
-    > (flvector-ref (flvector 0.0) 0)
-    0.0
-    > (define v (flvector 0.0 1.0))
-    > (flvector-ref v 0)
-    0.0
-    > (flvector-ref v 1)
-    1.0
-    > (flvector-set! v 0 2.0)
-    (void)
-    > (flvector-ref v 0)
-    2.0
-    > (unsafe-flvector-ref v 0)
-    2.0
-    > (unsafe-flvector-set! v 0 3.0)
-    (void)
-    > (flvector-ref v 0)
-    3.0
-    > (define v2 (make-flvector 5))
-    > (flvector-ref v2 4)
-    0.0
-    > (define v3 (make-flvector 5 3.0))
-    > (flvector-ref v3 4)
-    3.0
-    """
-    assert doctest
-
-def test_flvector_set_wrong_type():
-    with pytest.raises(SchemeException):
-        run_mod("""
-            #lang pycket
-            (require '#%flfxnum '#%unsafe)
-            (let [(a (flvector 1.2 1.3))] (flvector-set! a 1 'a))
-        """)
 #############################################################################
 def test_byte_huh(doctest):
     """
@@ -346,6 +301,25 @@ def test_open_input_and_read_line(source):
     """
     result = run_mod_expr(source, wrap=True)
     assert result == w_true
+
+def test_bytes_port(doctest):
+    r"""
+    ;> (define op1 (open-output-bytes))
+    ;> (write '((1 2 3) ("Tom" "Dick") ('a 'b 'c)) op1)
+    ;> (get-output-bytes op1)
+    ; #"((1 2 3) (\"Tom\" \"Dick\") ((quote a) (quote b) (quote c)))"
+    ;> (define op2 (open-output-bytes))
+    ;> (write "Hi " op2)
+    ;> (write "there" op2)
+    ;> (get-output-bytes op2)
+    ; #"\"Hi \"\"there\""
+    ! (define op3 (open-output-bytes))
+    > (write-bytes #"Hi " op3)
+    3
+    > (display #"there" op3)
+    > (get-output-bytes op3)
+    #"Hi there"
+    """
 
 
 ####################
@@ -685,3 +659,48 @@ def test_format(doctest):
     > (format "abc~adef~aghi" 1 2)
     "abc1def2ghi"
     """
+
+def test_procedure_closure_contents_eq(doctest):
+    r"""
+    ! (define (f x) (lambda () x))
+    ! (define a "abc")
+    ! (define (g x) (lambda () (g x)))
+    > (procedure-closure-contents-eq? (f a) (f a))
+    #t
+    > (procedure-closure-contents-eq? (f a) (f "abc"))
+    #t
+    > (procedure-closure-contents-eq? (f 1) (f 1))
+    #t
+    > (procedure-closure-contents-eq? (f a) (f "c"))
+    #f
+    > (procedure-closure-contents-eq? (g a) (g a))
+    #t
+    > (procedure-closure-contents-eq? (g a) ((g a)))
+    #t
+    > (procedure-closure-contents-eq? (g a) (((g a))))
+    #t
+    > (procedure-closure-contents-eq? (g a) (((g "c"))))
+    #f
+    """
+
+
+def test_unsafe_undefined(doctest):
+    """
+    ! (require '#%unsafe)
+    ! (struct p (x y) #:mutable #:transparent)
+    > (check-not-unsafe-undefined 1 'a)
+    1
+    E (check-not-unsafe-undefined unsafe-undefined 'a)
+    > (check-not-unsafe-undefined/assign 1 'a)
+    1
+    E (check-not-unsafe-undefined/assign unsafe-undefined 'a)
+    > (chaperone-struct-unsafe-undefined 1)
+    1
+    > (let* ([x (p 1 2)]
+             [y (chaperone-struct-unsafe-undefined x)]
+             [_ (set-p-y! y 3)]
+             [z (p-y y)])
+        z)
+    3
+    """
+

@@ -126,7 +126,7 @@ def test_mcons():
     with pytest.raises(SchemeException):
         run("(mcar 1 2)", None)
 
-def test_mcons(doctest):
+def test_mcons_equal(doctest):
     """
     > (equal? (mcons 1 2) (mcons 1 2))
     #t
@@ -200,7 +200,7 @@ def test_box():
     run("(unbox (box-immutable #f))", w_false)
     run("(let ([b (box 5)]) (begin (set-box! b #f) (unbox b)))", w_false)
 
-def test_fib():
+def test_fib_ycombinator():
     Y = """
   (lambda (f)
     ((lambda (x) (x x))
@@ -531,6 +531,25 @@ def test_callgraph_reconstruction():
     assert env.callgraph.calls == {f: {g: None}, g: {h: None, g: None}}
     assert g.body[0].should_enter
 
+    str = """
+        #lang pycket
+        (define (f x) (g (+ x 1)))
+        (define (g x) (if (= x 0) (f 5) (h x)))
+        (define (h x) x)
+        (g 0)
+        """
+
+    ast = parse_module(expand_string(str))
+    env = ToplevelEnv(config.get_testing_config(**{"pycket.callgraph":True}))
+    m = interpret_module(ast, env)
+    f = m.defs[W_Symbol.make("f")].closure.caselam.lams[0]
+    g = m.defs[W_Symbol.make("g")].closure.caselam.lams[0]
+    h = m.defs[W_Symbol.make("h")].closure.caselam.lams[0]
+
+    assert env.callgraph.calls == {f: {g: None}, g: {h: None, f: None}}
+    assert env.callgraph.recursive == {f: None, g: None}
+    assert g.body[0].should_enter
+
 def test_callgraph_reconstruction_through_primitives():
     from pycket.expand import expand_string, parse_module
     from pycket        import config
@@ -586,8 +605,8 @@ def test_should_enter_downrecursion():
 
     assert append.body[0].should_enter
     # This is long to account for let conversion
-    assert append.body[0].body[0].els.body[0].body[0].body[0].should_enter
+    assert append.body[0].els.body[0].should_enter
 
     assert f.body[0].should_enter
-    assert f.body[0].body[0].els.body[0].should_enter
+    assert f.body[0].els.body[0].should_enter
 

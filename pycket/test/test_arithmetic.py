@@ -254,7 +254,8 @@ def test_atan(doctest):
     2.356194490192345
     """
 
-@pytest.mark.xfail
+# doesn't run yet and takes awefully long
+@pytest.mark.skipif("True")
 def test_trigonometry(doctest):
     """
     ! (require racket/math)
@@ -575,7 +576,7 @@ def test_round(doctest):
 
 def test_flround(doctest):
     """
-    ! (require racket/flonum)
+    ! (require '#%flfxnum)
     > (flround 0.1)
     0.0
     > (flround 0.0)

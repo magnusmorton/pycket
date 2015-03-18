@@ -10,7 +10,6 @@ from rpython.rlib import jit
 
 PREFAB = values.W_Symbol.make("prefab")
 
-# TODO: inspector currently does nothing
 class W_StructInspector(values.W_Object):
     errorname = "struct-inspector"
     _immutable_fields_ = ["super"]
@@ -25,13 +24,25 @@ class W_StructInspector(values.W_Object):
     def __init__(self, super):
         self.super = super
 
+    def has_control(self, struct_type):
+        inspector = struct_type.inspector
+        if not isinstance(inspector, W_StructInspector):
+            return True
+        else:
+            inspector = inspector.super
+            while isinstance(inspector, W_StructInspector):
+                if inspector is self:
+                    return True
+                inspector = inspector.super
+            return False
+
 current_inspector = W_StructInspector(None)
 
 class W_StructType(values.W_Object):
     errorname = "struct-type-descriptor"
     _immutable_fields_ = ["name", "super", "init_field_cnt", "auto_field_cnt",
             "total_field_cnt", "auto_v", "props", "inspector",
-            "immutables[*]", "immutable_fields[*]", "guard", "constr_name", "auto_values[*]",
+            "immutables[*]", "immutable_fields[*]", "guard", "auto_values[*]",
             "offsets[*]", "constr", "pred", "acc", "mut", "prop_procedure"]
     unbound_prefab_types = {}
 
@@ -73,6 +84,7 @@ class W_StructType(values.W_Object):
             auto_v, inspector, proc_spec, immutables, guard, constr_name)
 
     @staticmethod
+    @jit.unroll_safe
     def make_prefab(prefab_key):
         if prefab_key in W_StructType.unbound_prefab_types:
             w_struct_type = W_StructType.unbound_prefab_types[prefab_key]
@@ -154,7 +166,7 @@ class W_StructType(values.W_Object):
     @jit.unroll_safe
     def initialize_props(self, props, proc_spec, env, cont):
         """
-        Properties initialisation contains few steps:
+        Properties initialization contains few steps:
             1. call initialize_prop for each property from the input list,
                it extracts all super values and stores them into props array
                with a flat structure
@@ -164,7 +176,7 @@ class W_StructType(values.W_Object):
                  of calling value procedure with a sub value as an argument
                * if the current property has a guard, the value is the result of
                  calling guard with a value and struct type info as arguments
-               * in other case just keep the current value
+               * in other case, just keep the current value
         """
         proplist = values.from_list(props)
         props = []
@@ -195,22 +207,19 @@ class W_StructType(values.W_Object):
             imm.append(i.value)
         self.immutables = imm[:]
         self.guard = guard
-        if isinstance(constr_name, values.W_Symbol):
-            self.constr_name = constr_name.utf8value
-        else:
-            self.constr_name = "make-" + self.name
 
         self.auto_values = [self.auto_v] * self.auto_field_cnt
-        self.isprefab = self.inspector is PREFAB
+        self.isprefab = inspector is PREFAB
         if self.isprefab:
             self.isopaque = False
         else:
             self.isopaque = self.inspector is not values.w_false
 
-        self.field_types = [None] * self.total_field_cnt
         self.calculate_offsets()
 
-        self.constr = W_StructConstructor(self)
+        constr_name = (constr_name.utf8value if
+            isinstance(constr_name, values.W_Symbol) else "make-" + self.name)
+        self.constr = W_StructConstructor(self, constr_name)
         self.pred = W_StructPredicate(self)
         self.acc = W_StructAccessor(self)
         self.mut = W_StructMutator(self)
@@ -230,7 +239,7 @@ class W_StructType(values.W_Object):
         self.offsets = offsets[:]
         self.immutable_fields = immutable_fields[:]
 
-    @jit.unroll_safe
+    @jit.elidable
     def get_offset(self, type):
         for t, v in self.offsets:
             if t is type:
@@ -465,32 +474,35 @@ class W_RootStruct(values.W_Object):
         raise SchemeException("expected: " + msg.tostring())
 
     @continuation
-    def receive_proc_cont(self, args, env, cont, _vals):
+    def receive_proc_cont(self, args, calling_app, env, cont, _vals):
         from pycket.interpreter import check_one_val
         proc = check_one_val(_vals)
-        return self.checked_call(proc, args, env, cont)
+        return self.checked_call(proc, args, calling_app, env, cont)
 
-    def checked_call(self, proc, args, env, cont):
+    def checked_call(self, proc, args, calling_app, env, cont):
         args_len = len(args)
         arity = proc.get_arity()
         if (args_len < arity.at_least or arity.at_least == -1) and not arity.list_includes(args_len):
             w_prop_val = self.struct_type().read_prop(w_prop_arity_string)
             if w_prop_val:
-                return w_prop_val.call([self], env, self.arity_error_cont(env, cont))
-        return proc.call(args, env, cont)
+                return w_prop_val.call_with_extra_info([self], env, self.arity_error_cont(env, cont), calling_app)
+        return proc.call_with_extra_info(args, env, cont, calling_app)
+
+    def call_with_extra_info(self, args, env, cont, calling_app):
+        typ = self.struct_type()
+        proc = typ.prop_procedure
+        if isinstance(proc, values.W_Fixnum):
+            return self.ref(typ.procedure_source, proc.value, env,
+                self.receive_proc_cont(args, calling_app, env, cont))
+        args = [self] + args
+        return self.checked_call(proc, args, calling_app, env, cont)
 
     # For all subclasses, it should be sufficient to implement ref, set, and
     # struct_type for call and iscallable to work properly.
     @label
     @make_call_method(simple=False)
     def call(self, args, env, cont):
-        typ = self.struct_type()
-        proc = typ.prop_procedure
-        if isinstance(proc, values.W_Fixnum):
-            return self.ref(typ.procedure_source, proc.value, env,
-                self.receive_proc_cont(args, env, cont))
-        args = [self] + args
-        return self.checked_call(proc, args, env, cont)
+        return self.call_with_extra_info(args, env, cont, None)
 
     def get_arity(self):
         raise NotImplementedError("abstract base class")
@@ -498,12 +510,16 @@ class W_RootStruct(values.W_Object):
     def struct_type(self):
         raise NotImplementedError("abstract base class")
 
-    @label
     def ref(self, struct_type, field, env, cont):
+        return self.ref_with_extra_info(struct_type, field, None, env, cont)
+
+    def ref_with_extra_info(self, struct_type, field, app, env, cont):
         raise NotImplementedError("abstract base class")
 
-    @label
     def set(self, struct_type, field, val, env, cont):
+        return self.set_with_extra_info(struct_type, field, val, None, env, cont)
+
+    def set_with_extra_info(self, struct_type, field, val, app, env, cont):
         raise NotImplementedError("abstract base class")
 
     # unsafe versions
@@ -520,12 +536,13 @@ class W_RootStruct(values.W_Object):
     def vals(self):
         raise NotImplementedError("abstract base class")
 
-@inline_small_list(immutable=True, attrname="values", unbox_num=True)
+@inline_small_list(immutable=True, attrname="storage", unbox_num=True)
 class W_Struct(W_RootStruct):
     errorname = "struct"
     _immutable_fields_ = ["_type"]
 
     @staticmethod
+    @jit.unroll_safe
     def make_prefab(w_key, w_values):
         w_struct_type = W_StructType.make_prefab(W_PrefabKey.from_raw_key(w_key, len(w_values)))
         for i, value in enumerate(w_values):
@@ -558,18 +575,18 @@ class W_Struct(W_RootStruct):
     # Rather than reference functions, we store the continuations. This is
     # necessarray to get constant stack usage without adding extra preamble
     # continuations.
-    @label
-    def ref(self, type, field, env, cont):
+    def ref_with_extra_info(self, type, field, app, env, cont):
         from pycket.interpreter import return_value
+        jit.promote(type)
         offset = self.struct_type().get_offset(type)
         if offset == -1:
             raise SchemeException("cannot reference an identifier before its definition")
         value = self._get_field_val(field + offset)
         return return_value(value, env, cont)
 
-    @label
-    def set(self, type, field, val, env, cont):
+    def set_with_extra_info(self, type, field, val, app, env, cont):
         from pycket.interpreter import return_value
+        jit.promote(type)
         offset = self.struct_type().get_offset(type)
         if offset == -1:
             raise SchemeException("cannot reference an identifier before its definition")
@@ -586,7 +603,6 @@ class W_Struct(W_RootStruct):
 
     # We provide a method to get properties from a struct rather than a struct_type,
     # since impersonators can override struct properties.
-    @label
     def get_prop(self, property, env, cont):
         from pycket.interpreter import return_value
         val = self.struct_type().read_prop_precise(property)
@@ -644,9 +660,10 @@ class W_Struct(W_RootStruct):
         return result
 
 class W_StructConstructor(values.W_Procedure):
-    _immutable_fields_ = ["type"]
-    def __init__(self, type):
+    _immutable_fields_ = ["type", "constr_name"]
+    def __init__(self, type, constr_name):
         self.type = type
+        self.constr_name = constr_name
 
     def make_struct(self, field_values):
         raise NotImplementedError("abstract base class")
@@ -656,15 +673,16 @@ class W_StructConstructor(values.W_Procedure):
     def constr_proc_cont(self, field_values, env, cont, _vals):
         from pycket.interpreter import return_value
         guard_super_values = _vals.get_all_values()
-        type = jit.promote(self.type)
+        struct_type = jit.promote(self.type)
         if guard_super_values:
             field_values = guard_super_values + field_values[len(guard_super_values):]
-        if len(type.auto_values) > 0:
-            field_values = field_values + type.auto_values
+        if len(struct_type.auto_values) > 0:
+            field_values = field_values + struct_type.auto_values
         for i, value in enumerate(field_values):
-            if not type.is_immutable_field_index(i):
-                field_values[i] = values.W_Cell(value)
-        result = W_Struct.make(field_values, type)
+            if not struct_type.is_immutable_field_index(i):
+                value = values.W_Cell(value)
+                field_values[i] = value
+        result = W_Struct.make(field_values, struct_type)
         return return_value(result, env, cont)
 
     @jit.unroll_safe
@@ -682,7 +700,7 @@ class W_StructConstructor(values.W_Procedure):
 
     @continuation
     def constr_proc_wrapper_cont(self, field_values, struct_type_name, issuper,
-        env, cont, _vals):
+        app, env, cont, _vals):
         from pycket.interpreter import return_multi_vals, jump
         guard_values = _vals.get_all_values()
         type = jit.promote(self.type)
@@ -697,34 +715,33 @@ class W_StructConstructor(values.W_Procedure):
                 split_position, super_auto, len(super_auto))
             if issuper:
                 return super_type.constr.code(field_values[:split_position],
-                    struct_type_name, True, env, cont)
+                    struct_type_name, True, env, cont, app)
             else:
                 return super_type.constr.code(field_values[:split_position],
                     struct_type_name, True,
-                    env, self.constr_proc_cont(field_values, env, cont))
+                    env, self.constr_proc_cont(field_values, env, cont), app)
         else:
             if issuper:
                 return return_multi_vals(values.Values.make(field_values), env, cont)
             else:
                 return jump(env, self.constr_proc_cont(field_values, env, cont))
 
-    def code(self, field_values, struct_type_name, issuper, env, cont):
+    def code(self, field_values, struct_type_name, issuper, env, cont, app):
         from pycket.interpreter import jump
         type = jit.promote(self.type)
         if type.guard is values.w_false:
             return jump(env, self.constr_proc_wrapper_cont(field_values,
-                struct_type_name, issuper, env, cont))
+                struct_type_name, issuper, app, env, cont))
         else:
             guard_args = field_values + [values.W_Symbol.make(struct_type_name)]
             jit.promote(self)
-            return type.guard.call(guard_args, env,
+            return type.guard.call_with_extra_info(guard_args, env,
                 self.constr_proc_wrapper_cont(field_values, struct_type_name,
-                    issuper, env, cont))
+                    issuper, app, env, cont), app)
 
-    @label
     @make_call_method(simple=False)
-    def call(self, args, env, cont):
-        return self.code(args, self.type.name, False, env, cont)
+    def call_with_extra_info(self, args, env, cont, app):
+        return self.code(args, self.type.name, False, env, cont, app)
 
     def tostring(self):
         return "#<procedure:%s>" % self.type.name
@@ -759,10 +776,10 @@ class W_StructFieldAccessor(values.W_Procedure):
         self.field = field.value
         self.field_name = field_name
 
-    @label
     @make_call_method([W_RootStruct], simple=False)
-    def call(self, struct, env, cont):
-        return self.accessor.access(struct, self.field, env, cont)
+    def call_with_extra_info(self, struct, env, cont, app):
+        jit.promote(self)
+        return self.accessor.access(struct, self.field, app, env, cont)
 
     def tostring(self):
         return "#<procedure:%s-%s>" % (self.accessor.type.name, self.field_name)
@@ -773,13 +790,12 @@ class W_StructAccessor(values.W_Procedure):
     def __init__(self, type):
         self.type = type
 
-    def access(self, struct, field, env, cont):
-        return struct.ref(self.type, field, env, cont)
+    def access(self, struct, field, app, env, cont):
+        return struct.ref_with_extra_info(self.type, field, app, env, cont)
 
-    @label
     @make_call_method([W_RootStruct, values.W_Fixnum], simple=False)
-    def call(self, struct, field, env, cont):
-        return struct.ref(self.type, field.value, env, cont)
+    def call_with_extra_info(self, struct, field, env, cont, app):
+        return struct.ref_with_extra_info(self.type, field.value, app, env, cont)
 
     def tostring(self):
         return "#<procedure:%s-ref>" % self.type.name
@@ -794,10 +810,9 @@ class W_StructFieldMutator(values.W_Procedure):
         self.field = field.value
         self.field_name = field_name
 
-    @label
-    @make_call_method([W_RootStruct, values.W_Object], simple=False)
-    def call(self, struct, val, env, cont):
-        return self.mutator.mutate(struct, self.field, val, env, cont)
+    @make_call_method([W_RootStruct, values.W_Object], simple=False, name="<struct-field-mutator-method>")
+    def call_with_extra_info(self, struct, val, env, cont, app):
+        return self.mutator.mutate(struct, self.field, val, app, env, cont)
 
     def tostring(self):
         return "#<procedure:%s-%s!>" % (self.mutator.type.name, self.field_name)
@@ -808,13 +823,12 @@ class W_StructMutator(values.W_Procedure):
     def __init__ (self, type):
         self.type = type
 
-    def mutate(self, struct, field, val, env, cont):
-        return struct.set(self.type, field, val, env, cont)
+    def mutate(self, struct, field, val, app, env, cont):
+        return struct.set_with_extra_info(self.type, field, val, app, env, cont)
 
-    @label
-    @make_call_method([W_RootStruct, values.W_Fixnum, values.W_Object], simple=False)
-    def call(self, struct, field, val, env, cont):
-        return struct.set(self.type, field.value, val, env, cont)
+    @make_call_method([W_RootStruct, values.W_Fixnum, values.W_Object], simple=False, name="<struct-mutator-method>")
+    def call_with_extra_info(self, struct, field, val, env, cont, app):
+        return struct.set_with_extra_info(self.type, field.value, val, app, env, cont)
 
     def tostring(self):
         return "#<procedure:%s-set!>" % self.type.name
@@ -846,6 +860,7 @@ w_prop_incomplete_arity = W_StructProperty(values.W_Symbol.make("prop:incomplete
 w_prop_custom_write = W_StructProperty(values.W_Symbol.make("prop:custom-write"), values.w_false)
 w_prop_equal_hash = W_StructProperty(values.W_Symbol.make("prop:equal+hash"), values.w_false)
 w_prop_chaperone_unsafe_undefined = W_StructProperty(values.W_Symbol.make("prop:chaperone-unsafe-undefined"), values.w_false)
+w_prop_set_bang_transformer = W_StructProperty(values.W_Symbol.make("prop:set!-transformer"), values.w_false)
 
 class W_StructPropertyPredicate(values.W_Procedure):
     errorname = "struct-property-predicate"
@@ -868,9 +883,9 @@ class W_StructPropertyAccessor(values.W_Procedure):
     _immutable_fields_ = ["property"]
     def __init__(self, prop):
         self.property = prop
-    @label
+
     @make_call_method(simple=False)
-    def call(self, args, env, cont):
+    def call_with_extra_info(self, args, env, cont, calling_app):
         from pycket.interpreter import return_value
         arg = args[0]
         if isinstance(arg, W_StructType):
@@ -882,7 +897,7 @@ class W_StructPropertyAccessor(values.W_Procedure):
         elif len(args) > 1:
             failure_result = args[1]
             if failure_result.iscallable():
-                return failure_result.call([], env, cont)
+                return failure_result.call_with_extra_info([], env, cont, calling_app)
             else:
                 return return_value(failure_result, env, cont)
         raise SchemeException("%s-accessor: expected %s? but got %s" %

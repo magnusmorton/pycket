@@ -21,9 +21,15 @@ def make_entry_point(pycketconfig=None):
 
     def actual_entry(argv):
         jit.set_param(None, "trace_limit", 1000000)
+
         jit.set_param(None, "threshold", 3)
         jit.set_param(None, "function_threshold", 7)
         jit.set_param(None, "trace_eagerness", 5)
+
+        # Pycket defaults
+        # jit.set_param(None, "threshold", 131)
+        # jit.set_param(None, "trace_eagerness", 50)
+
 
         config, names, args, retval = parse_args(argv)
         if retval != 0 or config is None:
@@ -64,7 +70,7 @@ def make_entry_point(pycketconfig=None):
         return 0
     return entry_point
 
-def target(driver, args):
+def target(driver, args): #pragma: no cover
     from rpython.config.config import to_optparse
     from pycket.config import expose_options, compute_executable_suffix
     config = driver.config
@@ -86,7 +92,7 @@ def target(driver, args):
     entry_point = make_entry_point(config)
     return entry_point, None
 
-def get_additional_config_options():
+def get_additional_config_options(): #pragma: no cover
     from pycket.config import pycketoption_descr
     return pycketoption_descr
 

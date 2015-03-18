@@ -210,11 +210,9 @@ class W_VectorSuper(W_Object):
     def __init__(self):
         raise NotImplementedError("abstract base class")
 
-    @label
     def vector_set(self, i, new, env, cont):
         raise NotImplementedError("abstract base class")
 
-    @label
     def vector_ref(self, i, env, cont):
         raise NotImplementedError("abstract base class")
 
@@ -360,11 +358,9 @@ class W_Box(W_Object):
     def __init__(self):
         raise NotImplementedError("abstract base class")
 
-    @label
     def unbox(self, env, cont):
         raise NotImplementedError("abstract base class")
 
-    @label
     def set_box(self, val, env, cont):
         raise NotImplementedError("abstract base class")
 
@@ -374,12 +370,10 @@ class W_MBox(W_Box):
     def __init__(self, value):
         self.value = value
 
-    @label
     def unbox(self, env, cont):
         from pycket.interpreter import return_value
         return return_value(self.value, env, cont)
 
-    @label
     def set_box(self, val, env, cont):
         from pycket.interpreter import return_value
         self.value = val
@@ -398,12 +392,10 @@ class W_IBox(W_Box):
     def immutable(self):
         return True
 
-    @label
     def unbox(self, env, cont):
         from pycket.interpreter import return_value
         return return_value(self.value, env, cont)
 
-    @label
     def set_box(self, val, env, cont):
         raise SchemeException("set-box!: not supported on immutable boxes")
 
@@ -811,6 +803,7 @@ class W_ThreadCell(W_Object):
 @memoize_constructor
 class W_Bytes(W_Object):
     errorname = "bytes"
+    _immutable_fields_ = ['value']
     _attrs_ = ['value']
 
     @staticmethod
@@ -975,8 +968,18 @@ class W_Procedure(W_Object):
         return True
     def immutable(self):
         return True
+    def call(self, args, env, cont):
+        return self.call_with_extra_info(args, env, cont, None)
+    def call_with_extra_info(self, args, env, cont, app):
+        return self.call(args, env, cont)
     def tostring(self):
         return "#<procedure>"
+
+
+class W_AssignmentTransformer(W_Object):
+    def __init__(self):
+        raise NotImplementedError("Abstract base class")
+
 
 # These next two classes allow for a uniform input to the `set_cmk` operation.
 # They are procedures which do the appropriate processing after `set_cmk` is done
@@ -1007,12 +1010,15 @@ class W_ThunkProcCMK(W_Procedure):
 
 
 class W_Prim(W_Procedure):
-    _immutable_fields_ = ["name", "code", "arity"]
-    def __init__ (self, name, code, arity=Arity.unknown):
+    _immutable_fields_ = ["name", "code", "arity", "simple1", "simple2"]
+
+    def __init__ (self, name, code, arity=Arity.unknown, simple1=None, simple2=None):
         self.name = name
         self.code = code
         assert isinstance(arity, Arity)
         self.arity = arity
+        self.simple1 = simple1
+        self.simple2 = simple2
 
     def get_arity(self):
         return self.arity
@@ -1232,7 +1238,6 @@ class W_PromotableClosure(W_Procedure):
     def enable_jitting(self):
         self.closure.enable_jitting()
 
-    @label
     def call(self, args, env, cont):
         jit.promote(self)
         return self.closure.call(args, env, cont)
@@ -1264,7 +1269,8 @@ class W_Parameterization(W_Object):
         self.keys = keys
         self.vals = vals
         self.root = root
-    def extend(self, params, vals): 
+    @jit.unroll_safe
+    def extend(self, params, vals):
         # why doesn't it like this assert?
         # assert len(params) == len(vals)
         # FIXME this is awful
@@ -1281,6 +1287,7 @@ class W_Parameterization(W_Object):
                 new_vals[i] = self.vals[i-len(params)]
 
         return W_Parameterization(self.root, new_keys, new_vals)
+    @jit.unroll_safe
     def get(self, param):
         k = param.key
         for (i, key) in enumerate(self.keys):
@@ -1501,6 +1508,7 @@ class W_StringInputPort(W_InputPort):
 
 class W_FileInputPort(W_InputPort):
     errorname = "input-port"
+    _immutable_fields_ = ["file"]
 
     def __init__(self, f):
         self.closed = False
@@ -1509,7 +1517,7 @@ class W_FileInputPort(W_InputPort):
     def close(self):
         self.closed = True
         self.file.close()
-        self.file = None
+        #self.file = None
 
     def read(self, n):
         return self.file.read(n)
@@ -1547,6 +1555,7 @@ class W_FileInputPort(W_InputPort):
 
 class W_FileOutputPort(W_OutputPort):
     errorname = "output-port"
+    _immutable_fields_ = ["file"]
 
     def __init__(self, f):
         self.closed = False
@@ -1561,7 +1570,7 @@ class W_FileOutputPort(W_OutputPort):
     def close(self):
         self.closed = True
         self.file.close()
-        self.file = None
+        #self.file = None
 
     def seek(self, offset, end=False):
         if end:

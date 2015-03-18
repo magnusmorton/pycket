@@ -16,6 +16,18 @@ class unsafe(object):
     def __init__(self, typ):
         self.typ = typ
 
+    def make_unwrapper(self):
+        typ = self.typ
+        def unwrapper(w_arg):
+            assert w_arg is not None
+            # the following precise type check is intentional.
+            # record_known_class records a precise class to the JIT,
+            # excluding subclasses
+            assert type(w_arg) is typ
+            jit.record_known_class(w_arg, typ)
+            return w_arg
+        return unwrapper, typ.errorname
+
 
 class subclass_unsafe(object):
     """ can be used in the argtypes part of an @expose call. The corresponding
@@ -26,6 +38,17 @@ class subclass_unsafe(object):
 
     def __init__(self, typ):
         self.typ = typ
+
+    def make_unwrapper(self):
+        typ = self.typ
+        def unwrapper(w_arg):
+            # this is not really communicating much to the jit
+            # but at least type inference knows the unsafe type
+            # (and if we come up with better ideas when know the place to
+            # use it)
+            assert isinstance(w_arg, typ)
+            return w_arg
+        return unwrapper, typ.errorname
 
 
 class default(object):
@@ -38,13 +61,21 @@ class default(object):
 
 class procedure(object):
     errorname = "procedure"
+    def make_unwrapper(self):
+        return unwrap_procedure, "procedure"
 
-def _make_arg_unwrapper(func, argstypes, funcname, has_self=False):
+def unwrap_procedure(w_arg):
+    if w_arg.iscallable():
+        return w_arg
+    return None
+
+procedure = procedure()
+
+def _make_arg_unwrapper(func, argstypes, funcname, has_self=False, simple=False):
     argtype_tuples = []
     min_arg = 0
     isdefault = False
     for i, typ in enumerate(argstypes):
-        isunsafe = SAFE
         default_value = None
         if isinstance(typ, default):
             isdefault = True
@@ -53,18 +84,10 @@ def _make_arg_unwrapper(func, argstypes, funcname, has_self=False):
         else:
             assert not isdefault, "non-default argument %s after default argument" % typ
             min_arg += 1
-        if isinstance(typ, unsafe):
-            typ = typ.typ
-            subclasses = typ.__subclasses__()
-            if subclasses:
-                raise ValueError("type %s cannot be used unsafely, since it has subclasses %s" % (typ, subclasses))
-            isunsafe = UNSAFE
-        elif isinstance(typ, subclass_unsafe):
-            typ = typ.typ
-            isunsafe = SUBCLASS_UNSAFE
+        unwrapper, errorname = typ.make_unwrapper()
         type_errormsg = "expected %s as argument %s to %s, got " % (
-                            typ.errorname, i, funcname)
-        argtype_tuples.append((i, typ, isunsafe, isdefault, default_value, type_errormsg))
+                            errorname, i, funcname)
+        argtype_tuples.append((i, unwrapper, isdefault, default_value, type_errormsg))
     unroll_argtypes = unroll.unrolling_iterable(argtype_tuples)
     max_arity = len(argstypes)
     if min_arg == max_arity:
@@ -73,7 +96,68 @@ def _make_arg_unwrapper(func, argstypes, funcname, has_self=False):
         aritystring = "%s to %s" % (min_arg, max_arity)
     errormsg_arity = "expected %s arguments to %s, got " % (
         aritystring, funcname)
+    if min_arg == max_arity and not has_self and min_arg in (1, 2) and simple:
+        func_arg_unwrap, call1, call2 = make_direct_arg_unwrapper(
+            func, min_arg, unroll_argtypes, errormsg_arity)
+    else:
+        func_arg_unwrap = make_list_arg_unwrapper(
+            func, has_self, min_arg, max_arity, unroll_argtypes, errormsg_arity)
+        call1 = call2 = None
     _arity = Arity(range(min_arg, max_arity+1), -1)
+    return func_arg_unwrap, _arity, call1, call2
+
+def make_direct_arg_unwrapper(func, num_args, unroll_argtypes, errormsg_arity):
+    # fast paths that allow the calling without constructing an args list
+    def func_arg_unwrap(*allargs):
+        from pycket import values
+        args = allargs[0]
+        rest = allargs[1:]
+        typed_args = ()
+        lenargs = len(args)
+        if lenargs != num_args:
+            raise SchemeException(errormsg_arity + str(lenargs))
+        if num_args == 1:
+            return func_direct_unwrap(args[0], *rest)
+        else:
+            assert num_args == 2
+            return func_direct_unwrap(args[0], args[1], *rest)
+    func_arg_unwrap.func_name = "%s_arg_unwrap%s" % (func.func_name, num_args)
+    if num_args == 1:
+        (i, unwrapper, default, default_value, type_errormsg), = list(unroll_argtypes)
+        assert i == 0
+        assert not default
+        def func_direct_unwrap(arg1, *rest):
+            typed_arg1 = unwrapper(arg1)
+            if typed_arg1 is None:
+                raise SchemeException(type_errormsg + arg1.tostring())
+            return func(typed_arg1, *rest)
+        func_direct_unwrap.func_name = "%s_fast1" % (func.func_name, )
+        return func_arg_unwrap, func_direct_unwrap, None
+    else:
+        assert num_args == 2
+        ((i1, unwrapper1, default1, default_value1, type_errormsg1),
+         (i2, unwrapper2, default2, default_value2, type_errormsg2)
+            ) = list(unroll_argtypes)
+        assert i1 == 0 and i2 == 1
+        assert not default1 and not default2
+        def func_direct_unwrap(arg1, arg2, *rest):
+            typed_arg1 = unwrapper1(arg1)
+            if typed_arg1 is not None:
+                typed_arg2 = unwrapper2(arg2)
+                if typed_arg2 is not None:
+                    return func(typed_arg1, typed_arg2, *rest)
+                else:
+                    type_errormsg = type_errormsg2
+                    arg = arg2
+            else:
+                type_errormsg = type_errormsg1
+                arg = arg1
+            raise SchemeException(type_errormsg + arg.tostring())
+        func_direct_unwrap.func_name = "%s_fast2" % (func.func_name, )
+        return func_arg_unwrap, None, func_direct_unwrap
+
+
+def make_list_arg_unwrapper(func, has_self, min_arg, max_arity, unroll_argtypes, errormsg_arity):
     def func_arg_unwrap(*allargs):
         from pycket import values
         if has_self:
@@ -89,33 +173,16 @@ def _make_arg_unwrapper(func, argstypes, funcname, has_self=False):
         if not min_arg <= lenargs <= max_arity:
             raise SchemeException(errormsg_arity + str(lenargs))
         type_errormsg = None
-        for i, typ, unsafe, default, default_value, type_errormsg in unroll_argtypes:
+        for i, unwrapper, default, default_value, type_errormsg in unroll_argtypes:
             if i >= min_arg and i >= lenargs:
                 assert default
                 typed_args += (default_value, )
                 continue
             arg = args[i]
-
-            if not unsafe:
-                if typ is not values.W_Object and not (
-                    typ is procedure and arg.iscallable() or \
-                        isinstance(arg, typ)):
-                    break
-            elif unsafe == UNSAFE:
-                assert arg is not None
-                # the following precise type check is intentional.
-                # record_known_class records a precise class to the JIT,
-                # excluding subclasses
-                assert type(arg) is typ
-                jit.record_known_class(arg, typ)
-            else:
-                assert unsafe == SUBCLASS_UNSAFE
-                # this is not really communicating much to the jit
-                # but at least type inference knows the unsafe type
-                # (and if we come up with better ideas when know the place to
-                # use it)
-                assert isinstance(arg, typ)
-            typed_args += (arg, )
+            typed_arg = unwrapper(arg)
+            if typed_arg is None:
+                break
+            typed_args += (typed_arg, )
         else:
             typed_args += rest
             return func(*typed_args)
@@ -123,7 +190,7 @@ def _make_arg_unwrapper(func, argstypes, funcname, has_self=False):
         assert type_errormsg is not None
         raise SchemeException(type_errormsg + arg.tostring())
     func_arg_unwrap.func_name = "%s_arg_unwrap" % (func.func_name, )
-    return func_arg_unwrap, _arity
+    return func_arg_unwrap
 
 def _make_result_handling_func(func_arg_unwrap, simple):
     if simple:
@@ -152,7 +219,7 @@ def make_procedure(n="<procedure>", argstypes=None, simple=True, arity=None):
         names = [n] if isinstance(n, str) else n
         name = names[0]
         if argstypes is not None:
-            func_arg_unwrap, _arity = _make_arg_unwrapper(func, argstypes, name)
+            func_arg_unwrap, _arity, _, _ = _make_arg_unwrapper(func, argstypes, name, simple=simple)
             if arity is not None:
                 _arity = arity
         else:
@@ -191,13 +258,15 @@ def expose(n, argstypes=None, simple=True, arity=None, nyi=False, extra_info=Fal
         name = names[0]
         if extra_info:
             assert not simple
+        call1 = call2 = None
         if nyi:
             def func_arg_unwrap(*args):
                 raise SchemeException(
                     "primitive %s is not yet implemented" % name)
             _arity = arity or Arity.unknown
         elif argstypes is not None:
-            func_arg_unwrap, _arity = _make_arg_unwrapper(func, argstypes, name)
+            func_arg_unwrap, _arity, call1, call2 = _make_arg_unwrapper(
+                    func, argstypes, name, simple=simple)
             if arity is not None:
                 _arity = arity
         else:
@@ -207,7 +276,7 @@ def expose(n, argstypes=None, simple=True, arity=None, nyi=False, extra_info=Fal
         if not extra_info:
             func_result_handling = make_remove_extra_info(func_result_handling)
         cls = values.W_Prim
-        p = cls(name, func_result_handling, _arity)
+        p = cls(name, func_result_handling, _arity, call1, call2)
         for nam in names:
             sym = values.W_Symbol.make(nam)
             if sym in prim_env:
@@ -220,7 +289,7 @@ def expose(n, argstypes=None, simple=True, arity=None, nyi=False, extra_info=Fal
 def make_call_method(argstypes=None, arity=None, simple=True, name="<method>"):
     def wrapper(func):
         if argstypes is not None:
-            func_arg_unwrap, _ = _make_arg_unwrapper(
+            func_arg_unwrap, _, _, _ = _make_arg_unwrapper(
                 func, argstypes, name, has_self=True)
         else:
             func_arg_unwrap = func

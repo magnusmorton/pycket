@@ -91,6 +91,7 @@ class LetrecCont(Cont):
                    unbox_num=True, factoryname="_make")
 class LetCont(Cont):
     _immutable_fields_ = ["counting_ast", "env", "prev"]
+    return_safe = True
 
     def __init__(self, counting_ast, env, prev):
         Cont.__init__(self, env, prev)
@@ -135,19 +136,11 @@ class LetCont(Cont):
 
     @jit.unroll_safe
     def plug_reduce(self, vals, _env):
-        # XXX remove copy
         len_vals = vals.num_values()
         jit.promote(len_vals)
         len_self = self._get_size_list()
         jit.promote(len_self)
-        vals_w = [None] * (len_self + len_vals)
-        i = 0
-        for j in range(len_self):
-            vals_w[i] = self._get_list(j)
-            i += 1
-        for j in range(len_vals):
-            vals_w[i] = vals.get_value(j)
-            i += 1
+        new_length = len_self + len_vals
         ast, rhsindex = self.counting_ast.unpack(Let)
         assert isinstance(ast, Let)
         if ast.counts[rhsindex] != len_vals:
@@ -161,16 +154,63 @@ class LetCont(Cont):
                 else:
                     if not jit.we_are_jitted():
                         ast.env_speculation_works = False
-            env = ConsEnv.make(vals_w, prev)
+            env = self._construct_env(len_self, vals, len_vals, new_length, prev)
             return ast.make_begin_cont(env, self.prev)
         else:
+            # XXX remove copy
+            vals_w = [None] * new_length
+            i = 0
+            for j in range(len_self):
+                vals_w[i] = self._get_list(j)
+                i += 1
+            for j in range(len_vals):
+                vals_w[i] = vals.get_value(j)
+                i += 1
             return (ast.rhss[rhsindex + 1], self.env,
                     LetCont.make(vals_w, ast, rhsindex + 1,
                                  self.env, self.prev))
 
+    @jit.unroll_safe
+    def _construct_env(self, len_self, vals, len_vals, new_length, prev):
+        # this is a complete mess. however, it really helps warmup a lot
+        if new_length == 0:
+            return ConsEnv.make0(prev)
+        if new_length == 1:
+            if len_self == 1:
+                elem = self._get_list(0)
+            else:
+                assert len_self == 0 and len_vals == 1
+                elem = vals.get_value(0)
+            return ConsEnv.make1(elem, prev)
+        if new_length == 2:
+            if len_self == 0:
+                assert len_vals == 2
+                elem1 = vals.get_value(0)
+                elem2 = vals.get_value(1)
+            elif len_self == 1:
+                assert len_vals == 1
+                elem1 = self._get_list(0)
+                elem2 = vals.get_value(0)
+            else:
+                assert len_self == 2 and len_vals == 0
+                elem1 = self._get_list(0)
+                elem2 = self._get_list(1)
+            return ConsEnv.make2(elem1, elem2, prev)
+        env = ConsEnv.make_n(new_length, prev)
+        i = 0
+        for j in range(len_self):
+            env._set_list(i, self._get_list(j))
+            i += 1
+        for j in range(len_vals):
+            env._set_list(i, vals.get_value(j))
+            i += 1
+        return env
+
+
 
 class FusedLet0Let0Cont(Cont):
     _immutable_fields_ = ["combined_ast"]
+    return_safe = True
     def __init__(self, combined_ast, env, prev):
         Cont.__init__(self, env, prev)
         self.combined_ast = combined_ast
@@ -193,6 +233,7 @@ class FusedLet0Let0Cont(Cont):
 
 class FusedLet0BeginCont(Cont):
     _immutable_fields_ = ["combined_ast"]
+    return_safe = True
     def __init__(self, combined_ast, env, prev):
         Cont.__init__(self, env, prev)
         self.combined_ast = combined_ast
@@ -247,6 +288,7 @@ class SetBangCont(Cont):
 
 class BeginCont(Cont):
     _immutable_fields_ = ["counting_ast", "env", "prev"]
+    return_safe = True
     def __init__(self, counting_ast, env, prev):
         Cont.__init__(self, env, prev)
         self.counting_ast = counting_ast
@@ -265,6 +307,7 @@ class BeginCont(Cont):
 # FIXME: it would be nice to not need two continuation types here
 class Begin0Cont(Cont):
     _immutable_fields_ = ["ast", "env", "prev"]
+    return_safe = True
     def __init__(self, ast, env, prev):
         Cont.__init__(self, env, prev)
         self.ast = ast
@@ -289,6 +332,7 @@ class Begin0FinishCont(Cont):
 
 class WCMKeyCont(Cont):
     _immutable_fields_ = ["ast", "env", "prev"]
+    return_safe = True
     def __init__(self, ast, env, prev):
         Cont.__init__(self, env, prev)
         self.ast = ast
@@ -305,6 +349,7 @@ class WCMKeyCont(Cont):
 
 class WCMValCont(Cont):
     _immutable_fields_ = ["ast", "env", "prev", "key"]
+    return_safe = True
     def __init__(self, ast, key, env, prev):
         Cont.__init__(self, env, prev)
         self.ast = ast
@@ -428,8 +473,18 @@ def return_value_direct(w_val, env, cont):
     val = values.Values.make1(w_val)
     return cont.plug_reduce(val, env)
 
-@label
 def return_multi_vals(vals, env, cont):
+    if cont.return_safe:
+        return cont.plug_reduce(vals, env)
+    return safe_return_multi_vals(vals, env, cont)
+
+# A safe variant which returns ensures control is handed back to
+# the CEK loop before applying the continuation.
+@label
+def safe_return_multi_vals(vals, env, cont):
+    return cont.plug_reduce(vals, env)
+
+def return_multi_vals_direct(vals, env, cont):
     return cont.plug_reduce(vals, env)
 
 class Cell(AST):
@@ -574,6 +629,7 @@ class WithContinuationMark(AST):
 
 class App(AST):
     _immutable_fields_ = ["rator", "rands[*]", "env_structure"]
+    app_like = True
 
     def __init__ (self, rator, rands, env_structure=None):
         assert rator.simple
@@ -582,6 +638,21 @@ class App(AST):
         self.rator = rator
         self.rands = rands
         self.env_structure = env_structure
+
+    @staticmethod
+    def make(rator, rands, env_structure=None):
+        if isinstance(rator, ModuleVar) and rator.is_primitive():
+            try:
+                w_prim = rator._lookup_primitive()
+            except SchemeException:
+                pass
+            else:
+                if isinstance(w_prim, values.W_Prim):
+                    if w_prim.simple1 and len(rands) == 1:
+                        return SimplePrimApp1(rator, rands, env_structure, w_prim)
+                    if w_prim.simple2 and len(rands) == 2:
+                        return SimplePrimApp2(rator, rands, env_structure, w_prim)
+        return App(rator, rands, env_structure)
 
     @staticmethod
     def make_let_converted(rator, rands):
@@ -608,13 +679,13 @@ class App(AST):
             name = "AppRand%s_"%i
         # The body is an App operating on the freshly bound symbols
         if fresh_vars:
-            fresh_body = [App(all_args[0], all_args[1:])]
+            fresh_body = [App.make(all_args[0], all_args[1:])]
             return Let(SymList(fresh_vars[:]), [1] * len(fresh_vars), fresh_rhss[:], fresh_body)
         else:
-            return App(rator, rands)
+            return App.make(rator, rands)
 
     def assign_convert(self, vars, env_structure):
-        return App(self.rator.assign_convert(vars, env_structure),
+        return App.make(self.rator.assign_convert(vars, env_structure),
                    [e.assign_convert(vars, env_structure) for e in self.rands],
                    env_structure=env_structure)
 
@@ -631,7 +702,12 @@ class App(AST):
     # are simple.
     @jit.unroll_safe
     def interpret(self, env, cont):
-        w_callable = self.rator.interpret_simple(env)
+        rator = self.rator
+        if (not env.pycketconfig().callgraph and
+                isinstance(rator, ModuleVar) and
+                rator.is_primitive()):
+            self.set_should_enter() # to jit downrecursion
+        w_callable = rator.interpret_simple(env)
         args_w = [None] * len(self.rands)
         for i, rand in enumerate(self.rands):
             args_w[i] = rand.interpret_simple(env)
@@ -643,6 +719,60 @@ class App(AST):
 
     def _tostring(self):
         return "(%s %s)"%(self.rator.tostring(), " ".join([r.tostring() for r in self.rands]))
+
+
+class SimplePrimApp1(App):
+    _immutable_fields_ = ['w_prim', 'rand1']
+    simple = True
+
+    def __init__(self, rator, rands, env_structure, w_prim):
+        App.__init__(self, rator, rands, env_structure)
+        assert len(rands) == 1
+        self.rand1, = rands
+        self.w_prim = w_prim
+
+    def run(self, env):
+        result = self.w_prim.simple1(self.rand1.interpret_simple(env))
+        if result is None:
+            result = values.w_void
+        return result
+
+    def interpret_simple(self, env):
+        return check_one_val(self.run(env))
+
+    def interpret(self, env, cont):
+        if not env.pycketconfig().callgraph:
+            self.set_should_enter() # to jit downrecursion
+        result = self.run(env)
+        return return_multi_vals_direct(result, env, cont)
+
+
+class SimplePrimApp2(App):
+    _immutable_fields_ = ['w_prim', 'rand1', 'rand2']
+    simple = True
+
+    def __init__(self, rator, rands, env_structure, w_prim):
+        App.__init__(self, rator, rands, env_structure)
+        assert len(rands) == 2
+        self.rand1, self.rand2 = rands
+        self.w_prim = w_prim
+
+    def run(self, env):
+        arg1 = self.rand1.interpret_simple(env)
+        arg2 = self.rand2.interpret_simple(env)
+        result = self.w_prim.simple2(arg1, arg2)
+        if result is None:
+            result = values.w_void
+        return result
+
+    def interpret_simple(self, env):
+        return check_one_val(self.run(env))
+
+    def interpret(self, env, cont):
+        if not env.pycketconfig().callgraph:
+            self.set_should_enter() # to jit downrecursion
+        result = self.run(env)
+        return return_multi_vals_direct(result, env, cont)
 
 class SequencedBodyAST(AST):
     _immutable_fields_ = ["body[*]", "counting_asts[*]"]
@@ -757,6 +887,8 @@ class Var(AST):
 
 
 class CellRef(Var):
+    simple = True
+
     def assign_convert(self, vars, env_structure):
         return CellRef(self.sym, env_structure)
 
@@ -772,6 +904,7 @@ class CellRef(Var):
         v = env.lookup(self.sym, self.env_structure)
         assert isinstance(v, values.W_Cell)
         return v.get_val()
+
 
 class Gensym(object):
     _counter = {}
@@ -840,17 +973,20 @@ class ModuleVar(Var):
         if self.srcmod is None:
             mod = modenv.current_module
         elif self.is_primitive():
-            # we don't separate these the way racket does
-            # but maybe we should
-            try:
-                return prim_env[self.srcsym]
-            except KeyError:
-                raise SchemeException("can't find primitive %s" % (self.srcsym.tostring()))
+            return self._lookup_primitive()
         else:
             mod = modenv._find_module(self.srcmod)
             if mod is None:
                 raise SchemeException("can't find module %s for %s" % (self.srcmod, self.srcsym.tostring()))
         return mod.lookup(self.srcsym)
+
+    def _lookup_primitive(self):
+        # we don't separate these the way racket does
+        # but maybe we should
+        try:
+            return prim_env[self.srcsym]
+        except KeyError:
+            raise SchemeException("can't find primitive %s" % (self.srcsym.tostring()))
 
     def assign_convert(self, vars, env_structure):
         return self
@@ -1023,6 +1159,10 @@ class CaseLambda(AST):
         for l in self.lams:
             l.enable_jitting()
 
+    def set_in_cycle(self):
+        for l in self.lams:
+            l.set_in_cycle()
+
     def make_recursive_copy(self, sym):
         return CaseLambda(self.lams, sym)
 
@@ -1114,6 +1254,11 @@ class Lambda(SequencedBodyAST):
         self.env_structure = env_structure
         for b in self.body:
             b.set_surrounding_lambda(self)
+        self.body[0].the_lam = self
+
+    def set_in_cycle(self):
+        for b in self.body:
+            b.in_cycle = True
 
     def enable_jitting(self):
         self.body[0].set_should_enter()
@@ -1215,11 +1360,16 @@ class Lambda(SequencedBodyAST):
 
     @jit.unroll_safe
     def collect_frees_without_recursive(self, recursive_sym, env):
-        vals = []
+        num_vals = len(self.frees.elems)
+        if recursive_sym is not None:
+            num_vals -= 1
+        vals = [None] * num_vals
+        i = 0
         for v in self.frees.elems:
             if v is not recursive_sym:
-                vals.append(env.lookup(v, self.enclosing_env_structure))
-        return vals[:]
+                vals[i] = env.lookup(v, self.enclosing_env_structure)
+                i += 1
+        return vals
 
     def _tostring(self):
         if self.rest and not self.formals:
@@ -1293,7 +1443,12 @@ class Letrec(SequencedBodyAST):
 
     @jit.unroll_safe
     def interpret(self, env, cont):
-        env_new = ConsEnv.make([values.W_Cell(None) for var in self.args.elems], env)
+        n_elems = len(self.args.elems)
+        env_new = ConsEnv.make_n(n_elems, env)
+        if n_elems:
+            assert isinstance(env_new, ConsEnv)
+            for i in range(n_elems):
+                env_new._set_list(i, values.W_Cell(None))
         return self.rhss[0], env_new, LetrecCont(self.counting_asts[0], env_new, cont)
 
     def direct_children(self):
@@ -1446,7 +1601,6 @@ class Let(SequencedBodyAST):
 
     def direct_children(self):
         return self.rhss + self.body
-        #return self.body + self.rhss
 
     def _mutated_vars(self):
         x = variable_set()
@@ -1502,7 +1656,7 @@ class Let(SequencedBodyAST):
             remove_num_envs = [0] * (len(self.rhss) + 1)
             env_structures = [sub_env_structure.prev] * len(self.rhss)
             env_structures.append(sub_env_structure)
-            return self, sub_env_structure, remove_num_envs
+            return self, sub_env_structure, env_structures, remove_num_envs
         # find out whether a smaller environment is sufficient for the body
         free_vars_not_from_let = {}
         for b in self.body:
@@ -1623,11 +1777,6 @@ class DefineValues(AST):
     def _mutated_vars(self):
         return self.rhs.mutated_vars()
 
-    def free_vars(self):
-        # free_vars doesn't contain module-bound variables
-        # which is the only thing defined by define-values
-        return self.rhs.free_vars()
-
     def _tostring(self):
         return "(define-values %s %s)" % (
             self.display_names, self.rhs.tostring())
@@ -1649,12 +1798,24 @@ def inner_interpret_two_state(ast, env, cont):
     came_from = ast
     config = env.pycketconfig()
     while True:
+        if (not jit.we_are_jitted()) and (not ast.is_label):
+            ast.count += 1
+            if ast.count >= 10000:
+                ast.set_should_enter()
+            if ast.count >= 10000 and (ast.count % 10000 == 0):
+                if (ast.the_lam is not None) and (not ast.in_cycle) and (not "string->num" in ast.the_lam.tostring()) and (not ast.is_bad):
+                    print "hot ast not jitted %s: %s"%(ast.count, ast.tostring())
+                    ast.is_bad = True
+                    #import pdb; pdb.set_trace()
         driver_two_state.jit_merge_point(ast=ast, came_from=came_from, env=env, cont=cont)
         if config.track_header:
             came_from = ast if ast.should_enter else came_from
         else:
-            came_from = ast
+            came_from = ast if ast.app_like else came_from
         t = type(ast)
+        # Manual conditionals to force specialization in translation
+        # This (or a slight variant) is known as "The Trick" in the partial evaluation literature
+        # (see Jones, Gomard, Sestof 1993)
         if t is Let:
             ast, env, cont = ast.interpret(env, cont)
         elif t is If:
@@ -1686,7 +1847,7 @@ def interpret_one(ast, env=None):
     if env.pycketconfig().two_state:
         inner_interpret = inner_interpret_two_state
     else:
-        inner_interpret = inner_interpret_two_state
+        inner_interpret = inner_interpret_one_state
     cont = nil_continuation
     cont.update_cm(values.parameterization_key, values.top_level_config)
     try:
@@ -1711,7 +1872,7 @@ def interpret_toplevel(a, env):
     else:
         return interpret_one(a, env)
 
-def interpret_module(m, env=None):
+def interpret_module(m, env):
     env = env if env else ToplevelEnv()
     m.interpret_mod(env)
     return m

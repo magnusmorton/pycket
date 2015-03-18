@@ -480,6 +480,37 @@ def test_make_prefab_struct(doctest):
     assert doctest
 
 
+# Structure Type Transformer Binding
+
+def test_struct(doctest):
+    """
+    ! (require racket/private/define-struct)
+    > (struct x ())
+    > (struct? (x))
+    #f
+    > (struct y () #:inspector (make-inspector))
+    > (struct? (y))
+    #t
+    """
+    assert doctest
+
+def test_struct_info(doctest):
+    """
+    ! (require racket/private/define-struct)
+    > (struct x ())
+    > (define-values (struct-type skipped?) (struct-info (x)))
+    > struct-type
+    #f
+    > skipped?
+    #t
+    > (struct y () #:inspector (make-inspector))
+    > (define-values (struct-type skipped?) (struct-info (y)))
+    > skipped?
+    #f
+    """
+    assert doctest
+
+
 # Other
 
 def test_procedure():

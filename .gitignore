@@ -11,4 +11,6 @@ pycket-c*
 .coverage
 .coverage.*
 compiled/
+/pypy
 pypy/
+pycket/test/coverage_report/

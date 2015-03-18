@@ -112,13 +112,15 @@ def list_to_string(w_list):
 
 def define_string_comp(name, op):
     @expose(name)
+    @jit.unroll_safe
     def comp(args):
         if len(args) < 2:
             raise SchemeException(name + ": requires at least 2 arguments")
-        head, tail = args[0], args[1:]
+        head = args[0]
         if not isinstance(head, W_String):
             raise SchemeException(name + ": not given a string")
-        for t in tail:
+        for i in range(1, len(args)):
+            t = args[i]
             if not isinstance(t, W_String):
                 raise SchemeException(name + ": not given a string")
             if not op(head, t):
@@ -156,6 +158,7 @@ def make_string(k, char):
         return W_String.fromunicode(char * k.value)
 
 @expose("string")
+@jit.unroll_safe
 def string(args):
     if len(args) == 0:
         return W_String.fromascii("")
@@ -404,7 +407,6 @@ def bytes_copy_bang(w_dest, w_dest_start, w_src, w_src_start, w_src_end):
 
     assert (src_end-src_start) <= dest_max
 
-
     for i in range(0, src_end - src_start):
         w_dest.value[dest_start + i] = w_src.value[src_start + i]
 
@@ -412,6 +414,7 @@ def bytes_copy_bang(w_dest, w_dest_start, w_src, w_src_start, w_src_end):
 
 def define_bytes_comp(name, op):
     @expose(name)
+    @jit.unroll_safe
     def comp(args):
         if len(args) < 2:
             raise SchemeException(name + ": requires at least 2 arguments")
@@ -467,6 +470,7 @@ def char_upcase(v):
 
 def define_char_comp(name, op):
     @expose(name)
+    @jit.unroll_safe
     def comp(args):
         if len(args) < 2:
             raise SchemeException(name + ": requires at least 2 arguments")

@@ -21,18 +21,36 @@ def find_prop_start_index(args):
 @jit.unroll_safe
 def unpack_properties(args, name):
     idx = find_prop_start_index(args)
-    args, props = args[:idx], args[idx:]
-    prop_len = len(props)
+
+    if idx == len(args):
+        props    = None
+        prop_len = 0
+    else:
+        args, props = args[:idx], args[idx:]
+        prop_len = len(props)
 
     if prop_len % 2 != 0:
         raise SchemeException(name + ": not all properties have corresponding values")
 
-    prop_keys = [props[i] for i in range(0, prop_len, 2)]
-    prop_vals = [props[i] for i in range(1, prop_len, 2)]
+    count = prop_len / 2
 
-    for k in prop_keys:
-        if not isinstance(k, imp.W_ImpPropertyDescriptor):
-            desc = "%s: %s is not a property descriptor" % (name, k.tostring())
+    # Avoid allocation in the event that we don't need to do anything
+    if prop_len == 0:
+        count = 0
+        prop_keys = None
+        prop_vals = None
+    else:
+        count = prop_len / 2
+        prop_keys = [None] * count
+        prop_vals = [None] * count
+
+    for i in range(count):
+        key = props[i*2]
+        prop_keys[i] = key
+        prop_vals[i] = props[i*2+1]
+
+        if not isinstance(key, imp.W_ImpPropertyDescriptor):
+            desc = "%s: %s is not a property descriptor" % (name, key.tostring())
             raise SchemeException(desc)
 
     return args, prop_keys, prop_vals
@@ -44,7 +62,7 @@ def unpack_vector_args(args, name):
     v, refh, seth = args
     if not isinstance(v, values.W_MVector):
         raise SchemeException(name + ": first arg not a vector")
-    if not refh.iscallable() or not seth.iscallable:
+    if not refh.iscallable() or not seth.iscallable():
         raise SchemeException(name + ": provided handler is not callable")
 
     return v, refh, seth, prop_keys, prop_vals
@@ -56,8 +74,8 @@ def unpack_procedure_args(args, name):
     proc, check = args
     if not proc.iscallable():
         raise SchemeException(name + ": first argument is not a procedure")
-    if not check.iscallable():
-        raise SchemeException(name + ": handler is not a procedure")
+    if check is not values.w_false and not check.iscallable():
+        raise SchemeException(name + ": handler is not a procedure or #f")
     return proc, check, prop_keys, prop_vals
 
 def unpack_box_args(args, name):
@@ -109,39 +127,59 @@ def unpack_hash_args(args, name):
 
 @expose("impersonate-hash")
 def impersonate_hash(args):
-    hash, ref_proc, set_proc, remove_proc, key_proc, clear_proc, prop_keys, prop_vals = \
-            unpack_hash_args(args, "impersonate-hash")
-    return imp.W_ImpHashTable(hash, ref_proc, set_proc, remove_proc,
-                              key_proc, clear_proc, prop_keys, prop_vals)
+    unpacked = unpack_hash_args(args, "impersonate-hash")
+    if unpacked[0].immutable():
+        raise SchemeException("impersonate-hash: cannot impersonate immutable hash")
+    return imp.W_ImpHashTable(*unpacked)
 
 @expose("chaperone-hash")
 def chaperone_hash(args):
-    hash, ref_proc, set_proc, remove_proc, key_proc, clear_proc, prop_keys, prop_vals = \
-            unpack_hash_args(args, "chaperone-hash")
-    return imp.W_ChpHashTable(hash, ref_proc, set_proc, remove_proc,
-                              key_proc, clear_proc, prop_keys, prop_vals)
+    unpacked = unpack_hash_args(args, "chaperone-hash")
+    return imp.W_ImpHashTable(*unpacked)
 
 @expose("impersonate-procedure")
 def impersonate_procedure(args):
-    proc, check, prop_keys, prop_vals = unpack_procedure_args(args, "impersonate-procedure")
-    return imp.W_ImpProcedure(proc, check, prop_keys, prop_vals)
+    unpacked = unpack_procedure_args(args, "impersonate-procedure")
+    proc, check, keys, _ = unpacked
+    if check is values.w_false and not keys:
+        return proc
+    return imp.W_ImpProcedure(*unpacked)
+
+@expose("impersonate-procedure*")
+def impersonate_procedure_star(args):
+    unpacked = unpack_procedure_args(args, "impersonate-procedure*")
+    proc, check, keys, _ = unpacked
+    if check is values.w_false and not keys:
+        return proc
+    return imp.W_ImpProcedure(*unpacked, self_arg=True)
 
 @expose("chaperone-procedure")
 def chaperone_procedure(args):
-    proc, check, prop_keys, prop_vals = unpack_procedure_args(args, "chaperone-procedure")
-    return imp.W_ChpProcedure(proc, check, prop_keys, prop_vals)
+    unpacked = unpack_procedure_args(args, "chaperone-procedure")
+    proc, check, keys, _ = unpacked
+    if check is values.w_false and not keys:
+        return proc
+    return imp.W_ChpProcedure(*unpacked)
+
+@expose("chaperone-procedure*")
+def chaperone_procedure_star(args):
+    unpacked = unpack_procedure_args(args, "chaperone-procedure*")
+    proc, check, keys, _ = unpacked
+    if check is values.w_false and not keys:
+        return proc
+    return imp.W_ChpProcedure(*unpacked, self_arg=True)
 
 @expose("impersonate-vector")
 def impersonate_vector(args):
-    v, refh, seth, prop_keys, prop_vals = unpack_vector_args(args, "impersonate-vector")
-    if v.immutable():
+    unpacked = unpack_vector_args(args, "impersonate-vector")
+    if unpacked[0].immutable():
         raise SchemeException("impersonate-vector: cannot impersonate immutable vector")
-    return imp.W_ImpVector(v, refh, seth, prop_keys, prop_vals)
+    return imp.W_ImpVector(*unpacked)
 
 @expose("chaperone-vector")
 def chaperone_vector(args):
-    v, refh, seth, prop_keys, prop_vals = unpack_vector_args(args, "chaperone-vector")
-    return imp.W_ChpVector(v, refh, seth, prop_keys, prop_vals)
+    unpacked = unpack_vector_args(args, "chaperone-vector")
+    return imp.W_ChpVector(*unpacked)
 
 # Need to check that fields are mutable
 @expose("impersonate-struct")
@@ -164,23 +202,33 @@ def impersonate_struct(args):
     # Consider storing immutables in an easier form in the structs implementation
     immutables = struct_type.immutables
 
-    # Slicing would be nicer
-    overrides = [args[i] for i in range(0, len(args), 2)]
-    handlers  = [args[i] for i in range(1, len(args), 2)]
+    all_false = True
+    count     = len(args) / 2
+    overrides = [None] * count
+    handlers  = [None] * count
+    for i in range(count):
+        ovr = args[i * 2]
+        hnd = args[i * 2 + 1]
 
-    for i in overrides:
-        if not imp.valid_struct_proc(i):
+        overrides[i] = ovr
+        handlers[i]  = hnd
+
+        if not imp.valid_struct_proc(ovr):
             raise SchemeException("impersonate-struct: not given valid field accessor")
-        elif (isinstance(i, values_struct.W_StructFieldMutator) and
-                i.field in immutables):
+        elif (isinstance(ovr, values_struct.W_StructFieldMutator) and
+                ovr.field in immutables):
             raise SchemeException("impersonate-struct: cannot impersonate immutable field")
-        elif (isinstance(i, values_struct.W_StructFieldAccessor) and
-                i.field in immutables):
+        elif (isinstance(ovr, values_struct.W_StructFieldAccessor) and
+                ovr.field in immutables):
             raise SchemeException("impersonate-struct: cannot impersonate immutable field")
 
-    for i in handlers:
-        if not i.iscallable():
+        if hnd is not values.w_false:
+            all_false = False
+        if not hnd.iscallable() and hnd is not values.w_false:
             raise SchemeException("impersonate-struct: supplied hander is not a procedure")
+
+    if all_false and not prop_keys:
+        return struct
 
     return imp.W_ImpStruct(struct, overrides, handlers, prop_keys, prop_vals)
 
@@ -198,46 +246,51 @@ def chaperone_struct(args):
     if not isinstance(struct, values_struct.W_RootStruct):
         raise SchemeException("chaperone-struct: not given struct")
 
-    # Slicing would be nicer
-    overrides = [args[i] for i in range(0, len(args), 2)]
-    handlers  = [args[i] for i in range(1, len(args), 2)]
+    all_false = True
+    count     = len(args) / 2
+    overrides = [None] * count
+    handlers  = [None] * count
+    for i in range(count):
+        ovr = args[i * 2]
+        hnd = args[i * 2 + 1]
 
-    for i in overrides:
-        if not imp.valid_struct_proc(i):
+        overrides[i] = ovr
+        handlers[i]  = hnd
+        if not imp.valid_struct_proc(ovr):
             raise SchemeException("chaperone-struct: not given valid field accessor")
 
-    for i in handlers:
-        if not i.iscallable():
+        if hnd is not values.w_false:
+            all_false = False
+        if not hnd.iscallable() and hnd is not values.w_false:
             raise SchemeException("chaperone-struct: supplied hander is not a procedure")
+
+    if all_false and not prop_keys:
+        return struct
 
     return imp.W_ChpStruct(struct, overrides, handlers, prop_keys, prop_vals)
 
 @expose("chaperone-box")
 def chaperone_box(args):
-    b, unbox, set, prop_keys, prop_vals = unpack_box_args(args, "chaperone-box")
-    return imp.W_ChpBox(b, unbox, set, prop_keys, prop_vals)
+    unpacked = unpack_box_args(args, "chaperone-box")
+    return imp.W_ChpBox(*unpacked)
 
 @expose("impersonate-box")
 def impersonate_box(args):
-    b, unbox, set, prop_keys, prop_vals = unpack_box_args(args, "impersonate-box")
-    if b.immutable():
+    unpacked = unpack_box_args(args, "impersonate-box")
+    if unpacked[0].immutable():
         raise SchemeException("Cannot impersonate immutable box")
-    return imp.W_ImpBox(b, unbox, set, prop_keys, prop_vals)
+    return imp.W_ImpBox(*unpacked)
 
 @expose("chaperone-continuation-mark-key")
 def ccmk(args):
-    key, getter, setter, prop_keys, prop_vals = unpack_cmk_args(args, "chaperone-continuation-mark-key")
-    return imp.W_ChpContinuationMarkKey(key, getter, setter, prop_keys, prop_vals)
+    unpacked = unpack_cmk_args(args, "chaperone-continuation-mark-key")
+    return imp.W_ChpContinuationMarkKey(*unpacked)
 
 @expose("impersonate-continuation-mark-key")
 def icmk(args):
-    key, getter, setter, prop_keys, prop_vals = unpack_cmk_args(args, "impersonate-continuation-mark-key")
-    return imp.W_ImpContinuationMarkKey(key, getter, setter, prop_keys, prop_vals)
+    unpacked = unpack_cmk_args(args, "impersonate-continuation-mark-key")
+    return imp.W_ImpContinuationMarkKey(*unpacked)
 
-# TODO: This is not correct, based on Racket's internal implementation.
-# The addition checking for immutablity should be done recursively, rather
-# than at just the top level of the data structure.
-# See: https://github.com/plt/racket/blob/106cd16d359c7cb594f4def8f427c55992d41a6d/racket/src/racket/src/bool.c
 @expose("chaperone-of?", [values.W_Object, values.W_Object], simple=False)
 def chaperone_of(a, b, env, cont):
     info = EqualInfo.CHAPERONE_SINGLETON

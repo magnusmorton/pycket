@@ -5,6 +5,7 @@ from pycket              import values
 from pycket              import values_struct
 from pycket              import values_string
 from pycket.cont         import continuation, label, loop_label
+from pycket.error        import SchemeException
 from pycket.prims.expose import expose, procedure
 from rpython.rlib        import jit, objectmodel
 
@@ -31,7 +32,7 @@ EqualInfo.IMPERSONATOR_SINGLETON = EqualInfo(EqualInfo.IMPERSONATOR)
 def equalp(a, b, env, cont):
     # FIXME: broken for cycles, etc
     info = EqualInfo.BASIC_SINGLETON
-    return equal_func(a, b, info, env, cont)
+    return equal_func_unroll_n(a, b, info, env, cont, n=5)
 
 @expose("equal?/recur", [values.W_Object, values.W_Object, procedure])
 def eqp_recur(v1, v2, recur_proc):
@@ -91,19 +92,35 @@ def equal_vec_done_cont(a, b, idx, info, env, cont, _vals):
     inc = values.W_Fixnum(idx.value + 1)
     return equal_vec_func(a, b, inc, info, env, cont)
 
-@loop_label
 def equal_func(a, b, info, env, cont):
+    return equal_func_loop(a, b, info, env, cont)
+
+def equal_func_unroll_n(a, b, info, env, cont, n):
+    # n says how many times to call equal_func before going through loop label
+    if n > 0:
+        jit.promote(n)
+        return equal_func_impl(a, b, info, env, cont, n - 1)
+    return equal_func_loop(a, b, info, env, cont)
+
+
+@loop_label
+def equal_func_loop(a, b, info, env, cont):
+    return equal_func_impl(a, b, info, env, cont, 0)
+
+def equal_func_impl(a, b, info, env, cont, n):
     from pycket.interpreter import return_value
 
     for_chaperone = jit.promote(info.for_chaperone)
     if a.eqv(b):
         return return_value(values.w_true, env, cont)
 
+    if (for_chaperone >= EqualInfo.CHAPERONE and b.is_non_interposing_chaperone()):
+        return equal_func_unroll_n(a, b.get_proxied(), info, env, cont, n)
+
     # Enter into chaperones/impersonators if we have permission to do so
     if ((for_chaperone == EqualInfo.CHAPERONE and a.is_chaperone()) or
         (for_chaperone == EqualInfo.IMPERSONATOR and a.is_impersonator())):
-        a = a.get_proxied()
-        return equal_func(a.get_proxied(), b, info, env, cont)
+        return equal_func_unroll_n(a.get_proxied(), b, info, env, cont, n)
 
     # If we are doing a chaperone/impersonator comparison, then we do not have
     # a chaperone-of/impersonator-of relation if `a` is not a proxy and
@@ -125,11 +142,11 @@ def equal_func(a, b, info, env, cont):
 
     if isinstance(a, values.W_Cons) and isinstance(b, values.W_Cons):
         cont = equal_car_cont(a.cdr(), b.cdr(), info, env, cont)
-        return equal_func(a.car(), b.car(), info, env, cont)
+        return equal_func_unroll_n(a.car(), b.car(), info, env, cont, n)
 
     if isinstance(a, values.W_MCons) and isinstance(b, values.W_MCons):
         cont = equal_car_cont(a.cdr(), b.cdr(), info, env, cont)
-        return equal_func(a.car(), b.car(), info, env, cont)
+        return equal_func_unroll_n(a.car(), b.car(), info, env, cont, n)
 
     if isinstance(a, values.W_Box) and isinstance(b, values.W_Box):
         is_chaperone = for_chaperone == EqualInfo.CHAPERONE
@@ -152,9 +169,7 @@ def equal_func(a, b, info, env, cont):
         if w_prop:
             w_prop = b_type.read_prop(values_struct.w_prop_equal_hash)
             if w_prop:
-                assert isinstance(w_prop, values_vector.W_Vector)
-                w_equal_proc, w_hash_proc, w_hash2_proc = \
-                    w_prop.ref(0), w_prop.ref(1), w_prop.ref(2)
+                w_equal_proc, w_hash_proc, w_hash2_proc = equal_hash_args(w_prop)
                 # FIXME: it should work with cycles properly and be an equal?-recur
                 w_equal_recur = equalp.w_prim
                 return w_equal_proc.call([a, b, w_equal_recur], env, cont)
@@ -167,17 +182,30 @@ def equal_func(a, b, info, env, cont):
             b_imm = len(b_type.immutables) == b_type.total_field_cnt
             a = values_struct.struct2vector(a, immutable=a_imm)
             b = values_struct.struct2vector(b, immutable=b_imm)
-            return equal_func(a, b, info, env, cont)
+            return equal_func_unroll_n(a, b, info, env, cont, n)
 
     if a.equal(b):
         return return_value(values.w_true, env, cont)
 
     return return_value(values.w_false, env, cont)
 
+# TODO: Should probably store these values in a uniform manner in the
+# struct property rather than parsing them every use.
+def equal_hash_args(w_prop):
+    if isinstance(w_prop, values_vector.W_Vector):
+        return w_prop.ref(0), w_prop.ref(1), w_prop.ref(2)
+    if isinstance(w_prop, values.W_List):
+        lst = values.from_list(w_prop)
+        assert len(lst) >= 3
+        return lst[0], lst[1], lst[2]
+    raise SchemeException("invalid prop:equal+hash arg " + w_prop.tostring())
+
 def eqp_logic(a, b):
     if a is b:
         return True
     elif isinstance(a, values.W_Fixnum) and isinstance(b, values.W_Fixnum):
+        return a.value == b.value
+    elif isinstance(a, values.W_Flonum) and isinstance(b, values.W_Flonum):
         return a.value == b.value
     elif isinstance(a, values.W_Character) and isinstance(b, values.W_Character):
         return a.value == b.value
@@ -187,10 +215,35 @@ def eqp_logic(a, b):
 def eqp(a, b):
     return values.W_Bool.make(eqp_logic(a, b))
 
+@jit.unroll_safe
+def procedure_closure_contents_eq_n(a, b, n):
+    if a is b:
+        return values.w_true
+    if n == 0:
+        return values.w_false
+    if isinstance(a, values.W_Closure1AsEnv):
+        if isinstance(b, values.W_Closure1AsEnv):
+            if a.caselam is not b.caselam:
+                return values.w_false
+            size = a._get_size_list()
+            if size != b._get_size_list():
+                return values.w_false
+            for i in range(size):
+                a_i = a._get_list(i)
+                b_i = b._get_list(i)
+                if a_i is b_i:
+                    continue
+                if isinstance(a_i, values.W_Closure1AsEnv) and isinstance(b_i, values.W_Closure1AsEnv):
+                    if values.w_false is procedure_closure_contents_eq_n(a_i, b_i, n-1):
+                        return values.w_false
+                elif not eqp_logic(a_i, b_i):
+                    return values.w_false
+            return values.w_true
+    return values.w_false
+
 @expose("procedure-closure-contents-eq?", [procedure] * 2)
 def procedure_closure_contents_eq(a, b):
-    # FIXME: provide actual information
-    return values.W_Bool.make((a is b))
+    return procedure_closure_contents_eq_n(a, b, 1)
 
 @expose("eqv?", [values.W_Object] * 2)
 def eqvp(a, b):

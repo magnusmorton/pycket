@@ -118,13 +118,6 @@ for args in [
 def byte_huh(val):
     if isinstance(val, values.W_Fixnum):
         return values.W_Bool.make(0 <= val.value <= 255)
-    if isinstance(val, values.W_Bignum):
-        # XXX this should never be reachable
-        try:
-            v = val.value.toint()
-            return values.W_Bool.make(0 <= v <= 255)
-        except OverflowError:
-            return values.w_false
     return values.w_false
 
 @expose("procedure?", [values.W_Object])
@@ -183,6 +176,7 @@ expose_val("prop:custom-write", values_struct.w_prop_custom_write)
 expose_val("prop:equal+hash", values_struct.w_prop_equal_hash)
 expose_val("prop:chaperone-unsafe-undefined",
            values_struct.w_prop_chaperone_unsafe_undefined)
+expose_val("prop:set!-transformer", values_struct.w_prop_set_bang_transformer)
 
 @expose("raise-type-error", [values.W_Symbol, values_string.W_String, values.W_Object])
 def raise_type_error(name, expected, v):
@@ -383,7 +377,6 @@ for args in [ ("subprocess?",),
               ("relative-path?",),
               ("absolute-path?",),
               ("internal-definition-context?",),
-              ("set!-transformer?",),
               ("rename-transformer?",),
               ("identifier?",),
               ("port?",),
@@ -395,9 +388,21 @@ for args in [ ("subprocess?",),
     define_nyi(*args)
 
 
+@expose("set!-transformer?", [values.W_Object])
+def set_bang_transformer(v):
+    if isinstance(v, values.W_AssignmentTransformer):
+        return values.w_true
+    elif isinstance(v, values_struct.W_RootStruct):
+        w_prop = v.struct_type().read_prop(values_struct.w_prop_set_bang_transformer)
+        return values.W_Bool.make(w_prop is not None)
+    else:
+        return values.w_false
+
 
 @expose("object-name", [values.W_Object])
 def object_name(v):
+    if isinstance(v, values.W_Prim):
+        return values.W_Symbol.make(v.name)
     return values_string.W_String.fromstr_utf8(v.tostring()) # XXX really?
 
 @expose("namespace-variable-value", [values.W_Symbol,
@@ -602,11 +607,12 @@ define_nyi("dynamic-wind", False)
 def callcc(a, env, cont, extra_call_info):
     return a.call_with_extra_info([values.W_Continuation(cont)], env, cont, extra_call_info)
 
-@expose("time-apply", [procedure, values.W_List], simple=False)
-def time_apply(a, args, env, cont):
+@expose("time-apply", [procedure, values.W_List], simple=False, extra_info=True)
+def time_apply(a, args, env, cont, extra_call_info):
     initial = time.clock()
-    return  a.call(values.from_list(args),
-                   env, time_apply_cont(initial, env, cont))
+    return  a.call_with_extra_info(values.from_list(args),
+                                   env, time_apply_cont(initial, env, cont), 
+                                   extra_call_info)
 
 @expose("apply", simple=False, extra_info=True)
 def apply(args, env, cont, extra_call_info):

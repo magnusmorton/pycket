@@ -1,5 +1,8 @@
 from rpython.rlib import jit
 
+# TODO: Find heavily executed lambdas that do not participate in a loop in the
+# callgraph.
+
 class CallGraph(object):
     def __init__(self):
         self.calls     = {}
@@ -42,19 +45,41 @@ class CallGraph(object):
     def is_recursive(self, lam, starting_from=None):
         # quatratic in theory, hopefully not very bad in practice
         if lam in self.recursive:
+            lam.set_in_cycle()
             return True
         if starting_from is None:
             starting_from = lam
-        todo = self.calls.get(starting_from, {}).keys()
+        reachable = self.calls.get(starting_from, None)
+        if reachable is None:
+            return False
+        todo = []
+        for key in reachable:
+            todo.append((key, Path(starting_from, None)))
         visited = {}
         while todo:
-            current = todo.pop()
+            current, path = todo.pop()
             if current is lam:
+                lam.set_in_cycle()
                 self.recursive[lam] = None
+                # all the lambdas in the path are recursive too
+                while path:
+                    path.node.set_in_cycle()
+                    self.recursive[path.node] = None
+                    path = path.prev
                 return True
             if current in visited:
                 continue
-            todo.extend(self.calls.get(current, {}).keys())
+            reachable = self.calls.get(current, None)
+            if reachable:
+                for key in reachable:
+                    todo.append((key, Path(current, path)))
             visited[current] = None
         return False
 
+class Path(object):
+    def __init__(self, node, prev):
+        self.node = node
+        self.prev = prev
+
+    def __repr__(self):
+        return "%s -> %s" % (self.node, self.prev)

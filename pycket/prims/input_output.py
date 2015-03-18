@@ -469,6 +469,11 @@ def file_position(args):
 ###############################################################################
 @expose("display", [values.W_Object, default(values.W_OutputPort, None)], simple=False)
 def display(datum, out, env, cont):
+    if isinstance(datum, values.W_Bytes):
+        bytes = datum.value
+        port = current_out_param.get(cont) if out is None else out
+        write_bytes_avail(bytes, port , 0, len(bytes))
+        return return_void(env, cont)
     return do_print(datum.tostring(), out, env, cont)
 
 @expose("newline", [default(values.W_OutputPort, None)], simple=False)
@@ -544,6 +549,15 @@ def printf(args, env, cont):
         raise SchemeException("printf: expected a format string, got something else")
     return do_print(format(fmt, args[1:], "printf"), None, env, cont)
 
+@expose("eprintf", simple=False)
+def eprintf(args, env, cont):
+    if not args:
+        raise SchemeException("eprintf: expected at least one argument, got 0")
+    fmt = args[0]
+    if not isinstance(fmt, values_string.W_String):
+        raise SchemeException("eprintf: expected a format string, got something else")
+    return do_print(format(fmt, args[1:], "eprintf"), current_error_param.get(cont), env, cont)
+
 @expose("format")
 @jit.look_inside_iff(lambda args: jit.isconstant(args[0]))
 def do_format(args):
@@ -610,8 +624,14 @@ def open_input_string(w_str, name):
     return values.W_StringInputPort(w_str.as_str_utf8())
 
 @expose("get-output-string", [values.W_StringOutputPort])
-def open_output_string(w_port):
+def get_output_string(w_port):
     return values_string.W_String.fromascii(w_port.contents()) # XXX
+
+@expose("get-output-bytes", [values.W_StringOutputPort])
+def get_output_bytes(w_port):
+    return values.W_Bytes.from_string(w_port.contents(),
+                                      immutable=False) # XXX
+
 
 # FIXME: implementation
 @expose("make-output-port", [values.W_Object, values.W_Object, values.W_Object,\
@@ -717,37 +737,39 @@ def write_char(w_char, w_port, env, cont):
     s = unicode_encode_utf_8(c, len(c), "strict")
     return do_print(s, w_port, env, cont)
 
+def write_bytes_avail(w_bstr, w_port, start, stop):
+    # FIXME: discern the available from the non-available form
+
+    if start == stop:
+        w_port.flush()
+        return 0
+
+    if start == 0 and stop == len(w_bstr):
+        to_write = w_bstr
+    else:
+        slice_stop = stop
+        assert start >= 0 and slice_stop <= len(w_bstr)
+        assert slice_stop >= 0
+        to_write = w_bstr[start:slice_stop]
+
+    # FIXME: we fake here
+    w_port.write("".join(to_write))
+    return stop - start
+
 @expose(["write-bytes", "write-bytes-avail"],
          [values.W_Bytes, default(values.W_OutputPort, None),
           default(values.W_Fixnum, values.W_Fixnum(0)),
           default(values.W_Fixnum, None)], simple=False)
-def write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
-    # FIXME: discern the available from the non-available form
+def wrap_write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
     from pycket.interpreter import return_value
-
     # FIXME: custom ports
     if w_port is None:
         w_port = current_out_param.get(cont)
-    start = w_start.value
-    stop = len(w_bstr.value) if w_end is None else w_end.value
-
-    if start == stop:
-        w_port.flush()
-        return return_value(values.W_Fixnum(0), env, cont)
-
-    if start == 0 and stop == len(w_bstr.value):
-        to_write = w_bstr.value
-    else:
-        slice_stop = stop - 1
-        assert start >= 0 and slice_stop < len(w_bstr.value)
-        assert slice_stop >= 0
-        to_write = w_bstr.value[start:slice_stop]
-
-    # FIXME: we fake here
-    w_port.write("".join(to_write))
-    return return_value(values.W_Fixnum(stop - start), env, cont)
-
-
+    bytes = w_bstr.value
+    start = 0 if w_start is None else w_start.value
+    stop = len(bytes) if w_end is None else w_end.value
+    n = write_bytes_avail(bytes, w_port, start, stop)
+    return return_value(values.W_Fixnum(n), env, cont)
 
 # FIXME:
 @expose("custom-write?", [values.W_Object])

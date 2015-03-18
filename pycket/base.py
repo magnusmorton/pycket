@@ -1,5 +1,4 @@
 from pycket.error             import SchemeException
-from pycket.cont              import label
 from rpython.tool.pairtype    import extendabletype
 from rpython.rlib import jit, objectmodel
 
@@ -20,8 +19,6 @@ class W_ProtoObject(object):
 
     def get_all_values(self):
         raise NotImplementedError("not a real value!")
-
-
 
 class W_Object(W_ProtoObject):
     __metaclass__ = extendabletype
@@ -73,6 +70,8 @@ class W_Object(W_ProtoObject):
         return self
     def get_properties(self):
         return {}
+    def is_non_interposing_chaperone(self):
+        return False
 
     def immutable(self):
         return False
@@ -90,6 +89,16 @@ class W_Object(W_ProtoObject):
     def tostring(self):
         return str(self)
 
+    # for expose
+    @classmethod
+    def make_unwrapper(cls):
+        if cls is W_Object:
+            return lambda x: x, ''
+        def unwrap(w_object):
+            if isinstance(w_object, cls):
+                return w_object
+            return None
+        return unwrap, cls.errorname
 
 class SingletonMeta(type):
     def __new__(cls, name, bases, dct):
