@@ -1,4 +1,4 @@
-#lang pycket #:stdlib
+#lang racket/base
 
 (define SIZE (string->number (vector-ref (current-command-line-arguments) 0 )))
 
@@ -13,13 +13,13 @@
 (define vec2 (mk-list SIZE 5))
 
 
-(define (cross-product l r)
- (map  (lambda (lnum)(time (foldl (lambda (acc rnum) (+ acc ( * lnum rnum ))) 0 r))) l))
-
 ;; (define (cross-product l r)
-;;     (for/list ([i l]
-;;                [j r])
-;;         (* i j)))
+;;  (map  (lambda (lnum)(time (foldl (lambda (acc rnum) (+ acc ( * lnum rnum ))) 0 r))) l))
+
+(define (cross-product l r)
+    (for/vector ([i l]
+               [j r])
+        (* i j)))
         
 
 ;; dot-product works on sequences such as vectors:
