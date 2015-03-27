@@ -49,10 +49,6 @@ counts_re = re.compile("loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)")
 times_re = re.compile("cpu time: (\d*) real time: \d* gc time: \d*")
 looptoken_re = re.compile("<Loop(\d*)>")
 
-values = []
-times = []
-costs = {}
-run_costs = []
 
 
 def simple_cost(frag, i=None):
@@ -168,6 +164,11 @@ for arg in sys.argv[1:]:
     entry_points = {}
     tracing_time = 0
     backend_time = 0
+    values = []
+    times = []
+    costs = {}
+    run_costs = []
+
     with open(arg, 'r') as f:
         line = f.readline()
         while line:
@@ -210,78 +211,20 @@ for arg in sys.argv[1:]:
     print "AVG TIME", sum(run_times) / len(run_times)
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
+    # bad idea
+    last_frag = None
+    last_count = 0 
     for key, value in counts.iteritems():
         if key in frags:
             frag = frags[key]
+            last_frag = frag
+            last_count = value
             for key2,value2 in counts.iteritems():
                 if key2 in frag.guards:
                     guard_cost = frag.cost2guard(key2)
                     value = value - (value2 + 200)
                     print "Fragment:", key2, "Cost:", guard_cost, "Count:", value2
             print "Fragment:", key, "Cost:", frag.cost(), "Count:", value
-    # eqn = {}
-#     for key, value in counts.iteritems():
-#         if value:
-#             if key in frags:
-#                 frag = frags[key]
-#                 for key2,value2 in counts.iteritems():
-#                     if key2 in frag.guards:
-#                         guard_cost = frag.cost2guard(key2)
-#                         value = value - value2
-#                         eqn[hash(frag) + 3] = value2
-#                         costs[hash(frag) + 3] = guard_cost
-#                 eqn[hash(frag)] =  value
-#                 costs[hash(frag)] = frag.cost()
 
-#     # special case for loops with no labels
-#     if len(frags) > len(counts):
-#         for key, value in frags.iteritems():
-#             if key in entry_points:
-#                 count = entry_points[key]
-#                 if count:
-#                     for key2,value2 in counts.iteritems():
-#                         if key2 in frag.guards:
-#                             guard_cost = frag.cost2guard(key2)
-#                             count = count - value2
-#                             eqn[hash(value) + 3] = value2
-#                             costs[hash(value) + 3] = guard_cost
-#                     eqn[hash(value)] = count
-#                     costs[hash(frag)] = frag.cost()
-                
-#     times.append(reduce(lambda x, y: x+y, run_times) / float(len(run_times)))
-#     values.append(eqn)
-
-
-
-# max_len = 0
-# longest = None
-# for val in values:
-#     if len(val) > max_len:
-#         max_len = len(val)
-#         longest = val
-
-# zero_longest = {key:0 for key in longest}
-# values = [dict(zero_longest.items() + val.items()) for val in values]
-
-# # need values in key order
-# coeffs = [[value for (key, value) in sorted(eqn.items())] for eqn in values]    
-
-# a = np.array(coeffs)
-# b = np.array(times)
-
-
-
-# savemat("results.mat", {"counts":a, "times":b})
-# # we are probably overconstrained
-# x = nnls(a, b)
-                
-# sorted_costs = [value for (key, value) in sorted(costs.items())]
-# with open("whole_program.plt", "a") as f:
-#     for i,value in enumerate(values):
-#         cost = reduce(lambda x, y: x + value[y] * costs[y], value,0)
-#         f.write(str(cost) + " " + str(times[i]) + "\n")
-
-# for i, cost in enumerate(sorted_costs):
-#     print x[0][i], cost
-
-
+    with open("gen_results.plt", "a") as f:
+        f.write( str((sum(run_times) / len(run_times)) / (last_count + 131)) + " " + str(last_frag.cost()) + "\n" )
