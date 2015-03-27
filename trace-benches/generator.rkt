@@ -16,10 +16,11 @@
 (define-syntax (looper stx)
   (syntax-case stx ()
     [( _ type )
+     (with-syntax ([vecset #'(vector-set! vec1 i (* 123.34 1234))])
      #`(time (for ([i (in-range REPS)])
           (begin
             #,@(for/list ([x (in-range 150)])
-                 #'(vector-set! vec1 i (* 123.34 1234))))))
+                #'vecset )))))
      ]
   ))
 
