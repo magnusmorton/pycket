@@ -19,7 +19,7 @@
      (with-syntax ([vecset #'(vector-set! vec1 i (* 123.34 1234))])
      #`(time (for ([i (in-range REPS)])
           (begin
-            #,@(for/list ([x (in-range 150)])
+            #,@(for/list ([x (in-range (string->number (vector-ref (current-command-line-arguments) 2)))])
                 #'vecset )))))
      ]
   ))
