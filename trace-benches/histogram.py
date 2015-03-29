@@ -1,5 +1,8 @@
+from __future__ import division
 import re
 import sys
+
+import operator
 
 histo = {}
 instruction_re = re.compile("<(.*) object at .*>")
@@ -15,14 +18,16 @@ for arg in sys.argv[1:]:
                     histo[ins] += 1
                 else:
                     histo[ins] = 1
-            elif split[0] == "LABEL:" or split[0] == "GUARD:":
+            elif split and (split[0] == "LABEL:" or split[0] == "GUARD:"):
                 if split[0] in histo:
                     histo[split[0]] += 1
                 else:
                     histo[split[0]] = 1
-            
+del histo["DEBUG_MERGE_POINT_OP"]            
 
-for key, value in histo.iteritems():
-    print key, value
+count = reduce(operator.add, histo.values())
+sorted_histo = sorted(histo.items(), key=operator.itemgetter(1))
+for key, value in sorted_histo:
+    print key, value, (value / count) * 100, "%"
 
             
