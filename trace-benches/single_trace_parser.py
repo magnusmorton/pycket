@@ -226,5 +226,5 @@ for arg in sys.argv[1:]:
                     print "Fragment:", key2, "Cost:", guard_cost, "Count:", value2
             print "Fragment:", key, "Cost:", frag.cost(), "Count:", value
 
-    with open("gen_results.plt", "a") as f:
+    with open("gennew_results.plt", "a") as f:
         f.write( str((sum(run_times) / len(run_times)) / (last_count + 131)) + " " + str(last_frag.cost()) + "\n" )

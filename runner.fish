@@ -1,7 +1,7 @@
 #!/usr/local/bin/fish
 
 rm output/*
-for x in (seq 1 10  1000)
+for x in (seq 1 10  1500)
         echo $x
 	sed s/Z/$x/ < trace-benches/generator.rkt.t > generated.rkt
 	for i in (seq 10)
