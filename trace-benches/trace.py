@@ -1,3 +1,6 @@
+import re
+target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
+
 def simple_cost(frag, i=None):
     return len(filter( lambda x: x.split()[0] != "DEBUG_MERGE_POINT_OP",frag.ops[0:None]))
 

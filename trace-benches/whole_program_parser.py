@@ -48,7 +48,7 @@ high_cost = ['ARRAYLEN_GC_OP',
 
 loop_re = re.compile("LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*)")
 bridge_re = re.compile("BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
-target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
+
 counts_re = re.compile("loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
 times_re = re.compile("\s*(\d*\.\d*) seconds time elapsed")
 looptoken_re = re.compile("<Loop(\d*)>")
@@ -115,15 +115,15 @@ for arg in sys.argv[1:]:
 
     # get times from tsv file
     name = os.path.basename(arg)
-    tsv_path = "/Users/magnusmorton/bench_runs/CrossBenchmarks_pycket.tsv"
+    tsv_path = "CrossBenchmarks_pycket.tsv"
     average_time = 0
     with open(tsv_path, "r") as f:
         tsv = csv.reader(f, delimiter = "\t")
         #bench name starts at 15th charcater of file name
-        benchname = name[14:]
+        benchname = name#[14:]
         times  = []
         for line in tsv:
-#            pdb.set_trace()
+            #pdb.set_trace()
             if len(line) >= 5 and line[4] == benchname and line[3] == "total":
                 times.append(float(line[1]))
         average_time = sum(times)/float(len(times))
