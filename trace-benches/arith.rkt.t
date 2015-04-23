@@ -19,11 +19,11 @@
     [( _ type )
      #`(for ([i  vec1])
                (let* (
-                      #,@(for/list ([x (in-range 10)])
+                      #,@(for/list ([x (in-range X)])
                            (if (equal? x 0)
                                #`[#,(string->symbol (format "binding~a" x)) i]
                                #`[#,(string->symbol (format "binding~a" x)) (#,(list-ref ops (random 3)) #,(string->symbol (format "binding~a" (random x))) #,(random 100))])))
-               (vector-set! out i binding9)))]))
+               (vector-set! out i bindingY)))]))
 
 
 
