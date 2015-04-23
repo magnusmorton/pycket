@@ -162,7 +162,7 @@ for arg in sys.argv[1:]:
                     costs[hash(frag)] = frag.cost()
                 
 
-    with open("whole_program.dat", "w") as f:
+    with open("whole_program.dat", "a") as f:
         cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)
         f.write(str(cost) + " " + str(average_time) + "\n")
 
