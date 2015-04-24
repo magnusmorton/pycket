@@ -1,6 +1,40 @@
 import re
 target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
 
+
+high_cost = ['ARRAYLEN_GC_OP',
+    'STRLEN_OP',
+    'STRGETITEM_OP',
+    'GETFIELD_GC_PURE_OP',
+    'GETFIELD_RAW_PURE_OP',
+    'GETARRAYITEM_GC_PURE_OP',
+    'GETARRAYITEM_RAW_PURE_OP',
+    'UNICODELEN_OP',
+    'UNICODEGETITEM_OP',
+    'GETARRAYITEM_GC_OP',
+    'GETARRAYITEM_RAW_OP',
+    'GETINTERIORFIELD_GC_OP',
+    'RAW_LOAD_OP',
+    'GETFIELD_GC_OP',
+    'GETFIELD_RAW_OP',
+    'NEW_OP',             #-> GcStruct, gcptrs inside are zeroed (not the rest)
+    'NEW_WITH_VTABLE_OP',  #-> GcStruct with vtable, gcptrs inside are zeroed
+    'NEW_ARRAY_OP',       #-> GcArray, not zeroed. only for arrays of primitives
+    'NEW_ARRAY_CLEAR_OP', #-> GcArray, fully zeroed
+    'NEWSTR_OP',           #-> STR, the hash field is zeroed
+    'NEWUNICODE_OP',       #-> UNICODE, the hash field is zeroed
+
+    'SETARRAYITEM_GC_OP',
+    'SETARRAYITEM_RAW_OP',
+    'SETINTERIORFIELD_GC_OP',
+    'SETINTERIORFIELD_RAW_OP',    # right now, only used by tests
+    'RAW_STORE_OP',
+    'SETFIELD_GC_OP',
+    'ZERO_PTR_FIELD_OP', # only emitted by the rewrite, clears a pointer field
+                        # at a given constant offset, no descr
+    'ZERO_ARRAY_OP']
+
+
 def simple_cost(frag, i=None):
     return len(filter( lambda x: x.split()[0] != "DEBUG_MERGE_POINT_OP",frag.ops[0:None]))
 

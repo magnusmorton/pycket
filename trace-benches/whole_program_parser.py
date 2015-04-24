@@ -14,37 +14,6 @@ from trace import *
 import pdb
 
 
-high_cost = ['ARRAYLEN_GC_OP',
-    'STRLEN_OP',
-    'STRGETITEM_OP',
-    'GETFIELD_GC_PURE_OP',
-    'GETFIELD_RAW_PURE_OP',
-    'GETARRAYITEM_GC_PURE_OP',
-    'GETARRAYITEM_RAW_PURE_OP',
-    'UNICODELEN_OP',
-    'UNICODEGETITEM_OP',
-    'GETARRAYITEM_GC_OP',
-    'GETARRAYITEM_RAW_OP',
-    'GETINTERIORFIELD_GC_OP',
-    'RAW_LOAD_OP',
-    'GETFIELD_GC_OP',
-    'GETFIELD_RAW_OP',
-    'NEW_OP',             #-> GcStruct, gcptrs inside are zeroed (not the rest)
-    'NEW_WITH_VTABLE_OP',  #-> GcStruct with vtable, gcptrs inside are zeroed
-    'NEW_ARRAY_OP',       #-> GcArray, not zeroed. only for arrays of primitives
-    'NEW_ARRAY_CLEAR_OP', #-> GcArray, fully zeroed
-    'NEWSTR_OP',           #-> STR, the hash field is zeroed
-    'NEWUNICODE_OP',       #-> UNICODE, the hash field is zeroed
-
-    'SETARRAYITEM_GC_OP',
-    'SETARRAYITEM_RAW_OP',
-    'SETINTERIORFIELD_GC_OP',
-    'SETINTERIORFIELD_RAW_OP',    # right now, only used by tests
-    'RAW_STORE_OP',
-    'SETFIELD_GC_OP',
-    'ZERO_PTR_FIELD_OP', # only emitted by the rewrite, clears a pointer field
-                        # at a given constant offset, no descr
-    'ZERO_ARRAY_OP']
 
 loop_re = re.compile("LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*)")
 bridge_re = re.compile("BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
@@ -58,7 +27,7 @@ times = []
 costs = {}
 run_costs = []
 
-
+Fragment.cost_fn = mem_cost
 
 
 #TODO: write a proper parser
@@ -120,12 +89,13 @@ for arg in sys.argv[1:]:
     with open(tsv_path, "r") as f:
         tsv = csv.reader(f, delimiter = "\t")
         #bench name starts at 15th charcater of file name
-        benchname = name#[14:]
+        benchname = name #[14:]
         times  = []
         for line in tsv:
             #pdb.set_trace()
             if len(line) >= 5 and line[4] == benchname and line[3] == "total":
                 times.append(float(line[1]))
+        #pdb.set_trace()
         average_time = sum(times)/float(len(times))
         
     
@@ -162,7 +132,7 @@ for arg in sys.argv[1:]:
                     costs[hash(frag)] = frag.cost()
                 
 
-    with open("whole_program.dat", "w") as f:
+    with open("whole_program.dat", "a") as f:
         cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)
         f.write(str(cost) + " " + str(average_time) + "\n")
 
