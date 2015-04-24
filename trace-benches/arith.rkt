@@ -17,13 +17,13 @@
 (define-syntax (test stx)
   (syntax-case stx ()
     [( _ type )
-     #`(for ([i  vec1])
+     #`(time (for ([i  vec1])
                (let* (
                       #,@(for/list ([x (in-range 10)])
                            (if (equal? x 0)
                                #`[#,(string->symbol (format "binding~a" x)) i]
                                #`[#,(string->symbol (format "binding~a" x)) (#,(list-ref ops (random 3)) #,(string->symbol (format "binding~a" (random x))) #,(random 100))])))
-               (vector-set! out i binding9)))]))
+               (vector-set! out i binding9))))]))
 
 
 
