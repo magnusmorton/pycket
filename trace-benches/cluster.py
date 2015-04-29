@@ -128,3 +128,8 @@ for path in sys.argv[1:]:
                 continue
             prog_vec[index] = int(line[1])
     prog_vecs[os.path.basename(path)] = prog_vec
+
+features = np.array(prog_vecs.values())
+whitened = whiten(features)
+
+print kmeans(whitened, 4)
