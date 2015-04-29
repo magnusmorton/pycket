@@ -2,7 +2,7 @@
 
 # This program attempts to cluster traces
 import sys
-
+import os.path
 import numpy as np
 
 
@@ -99,7 +99,7 @@ guard = "GUARD:"
 jump = "JUMP_OP"
 
 
-
+prog_vecs = {}
 for path in sys.argv[1:]:
     print path
     # create vector for classes
@@ -127,3 +127,4 @@ for path in sys.argv[1:]:
             else:
                 continue
             prog_vec[index] = int(line[1])
+    prog_vecs[os.path.basename(path)] = prog_vec
