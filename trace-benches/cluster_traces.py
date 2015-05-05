@@ -109,7 +109,6 @@ with open("histograms.dat", "r") as f:
     prog_vec = None
     current_name = None
     for line in f:
-        line = line.split()
         split = line.split()
         index = 99
         match_begin  =  begin_re.match(line)
