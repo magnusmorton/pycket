@@ -113,7 +113,7 @@ with open("histograms.dat", "r") as f:
         index = 99
         match_begin  =  begin_re.match(line)
         if match_begin:
-            if prog_vec:
+            if prog_vec is not None:
                 #normalise
                 total = np.sum(prog_vec)
                 func = lambda x: x / float(total)
@@ -123,6 +123,7 @@ with open("histograms.dat", "r") as f:
             # reset 
             prog_vec = np.zeros(7)
             current_name = match_begin.group(1)
+            continue
         elif split[0] in object_ops:
             index = 0
         elif split[0] in array_ops:
@@ -154,4 +155,4 @@ centroids,_ =  kmeans(whitened, 6)
 assignment,cdist = vq(features,centroids)
 
 print assignment
-pdb.set_trace()
+#pdb.set_trace()
