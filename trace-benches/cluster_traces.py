@@ -4,6 +4,7 @@
 import sys
 import os.path
 import pdb
+import re
 import numpy as np
 
 from matplotlib import pyplot
@@ -100,36 +101,47 @@ string_ops = [
 guard = "GUARD:"
 jump = "JUMP_OP"
 
+begin_re = re.compile("BEGIN TRACE: (.*) from (.*)\n")
 counts = np.zeros(8)
 prog_vecs = {}
 print "READING FILES..."
-with open("trace_names.txt", "r") as names:
-    for path in names:
-        # create vector for classes
-        prog_vec = np.zeros(7)
-        with open(path.rstrip(), 'r') as f:
-            for line in f:
-                line = line.split()
-                index = 99
-                if line[0] in object_ops:
-                    index = 0
-                elif line[0] in array_ops:
-                    index = 1
-                elif line[0] in int_ops:
-                    index = 2
-                elif line[0] in float_ops:
-                    index = 3
-                elif line[0] in alloc_ops:
-                    index = 4
-                elif line[0] == guard:
-                    index = 5
-                elif line[0] == jump:
-                    index = 6
-                else:
-                    continue
-                counts[index] += 1
-                prog_vec[index] = int(line[1])
-                prog_vecs[os.path.basename(path)] = prog_vec
+with open("histograms.dat", "r") as f:
+    prog_vec = None
+    current_name = None
+    for line in f:
+        line = line.split()
+        split = line.split()
+        index = 99
+        match_begin  =  begin_re.match(line)
+        if match_begin:
+            if prog_vec:
+                #normalise
+                total = np.sum(prog_vec)
+                func = lambda x: x / float(total)
+                vfunc = np.vectorize(func)
+                # add to global list
+                prog_vecs[current_name] = vfunc(prog_vec)
+            # reset 
+            prog_vec = np.zeros(7)
+            current_name = match_begin.group(1)
+        elif split[0] in object_ops:
+            index = 0
+        elif split[0] in array_ops:
+            index = 1
+        elif split[0] in int_ops:
+            index = 2
+        elif split[0] in float_ops:
+            index = 3
+        elif split[0] in alloc_ops:
+            index = 4
+        elif split[0] == guard:
+            index = 5
+        elif split[0] == jump:
+            index = 6
+        else:
+            continue
+        counts[index] += 1
+        prog_vec[index] = int(split[1])
 
 
 features = np.array(prog_vecs.values())
