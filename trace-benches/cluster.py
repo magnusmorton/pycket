@@ -3,9 +3,10 @@
 # This program attempts to cluster traces
 import sys
 import os.path
+import pdb
 import numpy as np
 
-
+from matplotlib import pyplot
 from scipy.cluster.vq import vq, kmeans, whiten
 
 
@@ -40,46 +41,46 @@ array_ops = ['ARRAYLEN_GC_OP',
              'SETINTERIORFIELD_RAW_OP',
              'ZERO_ARRAY_OP']
 
-int_ops = ['INCREMENT_DEBUG_COUNTER',
-           'INT_LT',
-           'INT_LE',
-           'INT_EQ',
-           'INT_NE',
-           'INT_GT',
-           'INT_GE',
-           'UINT_LT',
-           'UINT_LE',
-           'UINT_GT',
-           'UINT_GE',
-           'INT_ADD',
-           'INT_SUB',
-           'INT_MUL',
-           'INT_FLOORDIV',
-           'UINT_FLOORDIV',
-           'INT_MOD',
-           'INT_AND',
-           'INT_OR',
-           'INT_XOR',
-           'INT_RSHIFT',
-           'INT_LSHIFT',
+int_ops = ['INCREMENT_DEBUG_COUNTER_OP',
+           'INT_LT_OP',
+           'INT_LE_OP',
+           'INT_EQ_OP',
+           'INT_NE_OP',
+           'INT_GT_OP',
+           'INT_GE_OP',
+           'UINT_LT_OP',
+           'UINT_LE_OP',
+           'UINT_GT_OP',
+           'UINT_GE_OP',
+           'INT_ADD_OP',
+           'INT_SUB_OP',
+           'INT_MUL_OP',
+           'INT_FLOORDIV_OP',
+           'UINT_FLOORDIV_OP',
+           'INT_MOD_OP',
+           'INT_AND_OP',
+           'INT_OR_OP',
+           'INT_XOR_OP',
+           'INT_RSHIFT_OP',
+           'INT_LSHIFT_OP',
            
-           'UINT_RSHIFT',
-           'INT_SIGNEXT',
-           'INT_IS_ZERO',
-           'INT_IS_TRUE',
-           'INT_NEG',
-           'INT_INVERT',
-           'INT_FORCE_GE_ZERO',
-           'INT_ADD_OVF',
-           'INT_SUB_OVF',
-           'INT_MUL_OVF']
+           'UINT_RSHIFT_OP',
+           'INT_SIGNEXT_OP',
+           'INT_IS_ZERO_OP',
+           'INT_IS_TRUE_OP',
+           'INT_NEG_OP',
+           'INT_INVERT_OP',
+           'INT_FORCE_GE_ZERO_OP',
+           'INT_ADD_OVF_OP',
+           'INT_SUB_OVF_OP',
+           'INT_MUL_OVF_OP']
 
-float_ops = [ 'FLOAT_ADD',
-              'FLOAT_SUB',
-              'FLOAT_MUL',
-              'FLOAT_TRUEDIV',
-              'FLOAT_NEG',
-              'FLOAT_ABS']
+float_ops = [ 'FLOAT_ADD_OP',
+              'FLOAT_SUB_OP',
+              'FLOAT_MUL_OP',
+              'FLOAT_TRUEDIV_OP',
+              'FLOAT_NEG_OP',
+              'FLOAT_ABS_OP']
 
 alloc_ops = ['NEW_OP',             #-> GcStruct, gcptrs inside are zeroed (not the rest)
              'NEW_WITH_VTABLE_OP',  #-> GcStruct with vtable, gcptrs inside are zeroed
@@ -92,18 +93,18 @@ string_ops = [
     'UNICODELEN_OP',
     'UNICODEGETITEM_OP',
     'STRLEN_OP',
-    'COPYSTRCONTENT',     
-    'COPYUNICODECONTENT',
+    'COPYSTRCONTENT_OP',     
+    'COPYUNICODECONTENT_OP',
     'STRGETITEM_OP']
 guard = "GUARD:"
 jump = "JUMP_OP"
 
-
+counts = np.zeros(8)
 prog_vecs = {}
 for path in sys.argv[1:]:
     print path
     # create vector for classes
-    prog_vec = np.zeros(8)
+    prog_vec = np.zeros(7)
     with open(path, 'r') as f:
         for line in f:
             line = line.split()
@@ -118,18 +119,26 @@ for path in sys.argv[1:]:
                 index = 3
             elif line[0] in alloc_ops:
                 index = 4
-            elif line[0] in string_ops:
-                index = 5
             elif line[0] == guard:
-                index = 6
+                index = 5
             elif line[0] == jump:
-                index = 0
+                index = 6
             else:
                 continue
+            counts[index] += 1
             prog_vec[index] = int(line[1])
     prog_vecs[os.path.basename(path)] = prog_vec
 
-features = np.array(prog_vecs.values())
-whitened = whiten(features)
 
-print kmeans(whitened, 4)
+features = np.array(prog_vecs.values())
+
+whitened = whiten(features)
+initial = [kmeans(features,i) for i in range(1,10)]
+pyplot.plot([var for (cent,var) in initial])
+pyplot.show()
+    
+centroids,_ =  kmeans(whitened, 26)
+
+assignment,cdist = vq(features,centroids)
+
+pdb.set_trace()

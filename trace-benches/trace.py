@@ -51,7 +51,9 @@ def mem_cost(frag, i=None):
             cost += 1
         j+=1
     return cost
-            
+
+def null_cost(frag, i=None):
+    return 1
         
         
 
