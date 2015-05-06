@@ -126,8 +126,12 @@ for path in sys.argv[1:]:
             else:
                 continue
             counts[index] += 1
-            prog_vec[index] = int(line[1])
-    prog_vecs[os.path.basename(path)] = prog_vec
+    prog_vec[index] = int(line[1])
+    total = np.sum(prog_vec)
+    func = lambda x: x / float(total)
+    vfunc = np.vectorize(func)
+                # add to global list
+    prog_vecs[os.path.basename(path)] = vfunc(prog_vec)
 
 
 features = np.array(prog_vecs.values())
