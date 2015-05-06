@@ -104,6 +104,7 @@ jump = "JUMP_OP"
 begin_re = re.compile("BEGIN TRACE: (.*) from (.*)\n")
 counts = np.zeros(8)
 prog_vecs = {}
+traces = 0
 print "READING FILES..."
 with open("histograms.dat", "r") as f:
     prog_vec = None
@@ -113,6 +114,7 @@ with open("histograms.dat", "r") as f:
         index = 99
         match_begin  =  begin_re.match(line)
         if match_begin:
+            traces += 1
             if prog_vec is not None:
                 #normalise
                 total = np.sum(prog_vec)
@@ -148,11 +150,36 @@ features = np.array(prog_vecs.values())
 
 whitened = whiten(features)
 
+std = np.std(features, 0)
+
 print "PERFORMING Kmeans"
 
-centroids,_ =  kmeans(whitened, 6)
+# initial = [kmeans(features,i) for i in range(1,40)]
+# pyplot.plot([var for (cent,var) in initial])
+# pyplot.show()
+centroids,_ =  kmeans(whitened, 6, 100)
 
-assignment,cdist = vq(features,centroids)
+# for x in np.nditer(centroids):
+#     print x
 
-print assignment
+print "Centroids:"
+unwhitened = centroids * std
+for x in xrange(unwhitened.shape[0]):
+    print unwhitened[x]
+
+assignment,cdist = vq(whitened,centroids)
+
+counts = {}
+
+for x in xrange(assignment.size):
+    val = assignment[x]
+    if val not in counts:
+        counts[val] = 1
+    else:
+        counts[val] += 1
+
+print "CLUSTER COUNTS"
+print counts
+#print assignment
+#pdb.set_trace()
 #pdb.set_trace()
