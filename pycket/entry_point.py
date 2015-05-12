@@ -47,6 +47,7 @@ def make_entry_point(pycketconfig=None):
         env.module_env.add_module(module_name, ast)
         try:
             from rpython.rlib import jit_hooks
+            print ""
             print "BEGIN"
             print "======="
             jit_hooks.stats_set_debug(None, True)
