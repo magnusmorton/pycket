@@ -77,7 +77,8 @@ for arg in sys.argv[1:]:
     with open(arg, 'r') as f:
         line = f.readline()
         while line:
-            if line == "BEGIN":
+            split = line.split()
+            if split[0] == "BEGIN":
                 # we only need the last instance of these
                 counts = {}
                 traces = []
