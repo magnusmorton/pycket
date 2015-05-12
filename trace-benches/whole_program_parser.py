@@ -134,7 +134,7 @@ for arg in sys.argv[1:]:
 
     with open("whole_program.dat", "a") as f:
         cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)
-        f.write(str(cost) + " " + str(average_time) + "\n")
+        f.write(str(cost) + " " + str(average_time) + " " +  name "\n")
 
 
     

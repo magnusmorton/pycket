@@ -5,7 +5,7 @@ import sys
 import os.path
 import pdb
 import numpy as np
-
+import collections
 from matplotlib import pyplot
 from scipy.cluster.vq import vq, kmeans, whiten
 
@@ -100,7 +100,7 @@ guard = "GUARD:"
 jump = "JUMP_OP"
 
 counts = np.zeros(8)
-prog_vecs = {}
+prog_vecs = collections.OrderedDict()
 for path in sys.argv[1:]:
     print path
     # create vector for classes
@@ -141,8 +141,8 @@ initial = [kmeans(features,i) for i in range(1,10)]
 pyplot.plot([var for (cent,var) in initial])
 pyplot.show()
     
-centroids,_ =  kmeans(whitened, 26)
+centroids,_ =  kmeans(whitened, 3)
 
-assignment,cdist = vq(features,centroids)
+assignment,cdist = vq(whitened,centroids)
 
 pdb.set_trace()
