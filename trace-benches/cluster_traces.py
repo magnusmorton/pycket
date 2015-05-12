@@ -183,3 +183,4 @@ print counts
 #print assignment
 #pdb.set_trace()
 #pdb.set_trace()
+pdb.set_trace()

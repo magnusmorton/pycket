@@ -96,7 +96,7 @@ for arg in sys.argv[1:]:
                 traces.append(build_trace(f, guard=guard))
             elif line[0:7] == "TRACING":
                 tracing_time = 1000 *  float(line.split()[1])
-                #run_times[-1] -= tracing_time
+	#run_times[-1] -= tracing_time
             elif line[0:7] == "BACKEND":
                 backend_time =  1000 * float(line.split()[1])
                 #run_times[-1] -= backend_time
@@ -111,22 +111,24 @@ for arg in sys.argv[1:]:
                     if m_counts.group(1) == 'b':
                         guards.append(int(m_counts.group("fragment")))
             line = f.readline()
-   
+    # in the case of let generated histogram, the first trace is vector generation
+    pdb.set_trace()
+    del traces[0]
 
-    # get times from tsv file
+    # # get times from tsv file
     name = os.path.basename(arg)
-    tsv_path = "CrossBenchmarks_pycket.tsv"
-    average_time = 0
-    with open(tsv_path, "r") as f:
-        tsv = csv.reader(f, delimiter = "\t")
-        #bench name starts at 15th charcater of file name
-        benchname = name#[14:]
-        times  = []
-        for line in tsv:
-            #pdb.set_trace()
-            if len(line) >= 5 and line[4] == benchname and line[3] == "total":
-                times.append(float(line[1]))
-        average_time = sum(times)/float(len(times))
+    # tsv_path = "CrossBenchmarks_pycket.tsv"
+    # average_time = 0
+    # with open(tsv_path, "r") as f:
+    #     tsv = csv.reader(f, delimiter = "\t")
+    #     #bench name starts at 15th charcater of file name
+    #     benchname = name#[14:]
+    #     times  = []
+    #     for line in tsv:
+    #         #pdb.set_trace()
+    #         if len(line) >= 5 and line[4] == benchname and line[3] == "total":
+    #             times.append(float(line[1]))
+    #     average_time = sum(times)/float(len(times))
         
     
     # build fragments for each trace, flatten the list and turn it into a dic
