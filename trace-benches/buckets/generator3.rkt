@@ -26,8 +26,8 @@
                (begin
                  #,@(for/list ([x (in-range  100)])
                       (case (modulo x 35)
-                        [(in-range 10 )#`(vector-set! vec1 i (* 123.34 #,(random 10)) )]
-                        [(in-range 10 15 ) #`(let* (
+                        [(in-range 5 )#`(vector-set! vec1 i (* 123.34 #,(random 10)) )]
+                        [(in-range 5 15 ) #`(let* (
                                               #,@(for/list ([y (in-range 10)])
                                                    (if (equal? y 0)
                                                        #`[#,(string->symbol (format "binding~a" y)) i]

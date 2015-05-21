@@ -24,8 +24,8 @@
     [( _ type  )
      #`(time (for ([i (in-range REPS)])
                (begin
-                 #,@(for/list ([x (in-range  100)])
-                      (case (modulo x 35)
+                 #,@(for/list ([x (in-range  200)])
+                      (case (modulo x 37)
                         [(in-range 10 )#`(vector-set! vec1 i (* 123.34 #,(random 10)) )]
                         [(in-range 10 15 ) #`(let* (
                                               #,@(for/list ([y (in-range 10)])

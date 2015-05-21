@@ -33,7 +33,7 @@
                                                        #`[#,(string->symbol (format "binding~a" y)) i]
                                                        #`[#,(string->symbol (format "binding~a" y)) (#,(list-ref ops (random 3)) #,(string->symbol (format "binding~a" (random y))) #,(random 100))])))
                                          (vector-set! out i binding9))]
-                        [(in-range 15 30) #'(set! l (cons l "foo"))]
+                        [(in-range 15 34) #'(set! l (cons l "foo"))]
                         [else #`(set! b (< 50 #,(random 100)))])))))]))
 
 
