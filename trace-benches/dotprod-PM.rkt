@@ -8,7 +8,7 @@
 (define vec2 (in-range 5 (+ 5 SIZE)))
 
 ;; code from Sam's ICFP'15 submission
-(define (dot u v) (for/sum ([x u] [y v]) (* x y)))
+(define (dot u v) (for/sum ([x u] [y v]) (* (modulo x 256) ( y)))
 
 ;; check result stays at word size (commented out for now)
 ;(define result (dot vec1 vec2))

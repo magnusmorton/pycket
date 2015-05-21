@@ -43,7 +43,7 @@ array_ops = ['ARRAYLEN_GC_OP',
              
              'ZERO_ARRAY_OP']
 
-int_ops = ['INCREMENT_DEBUG_COUNTER_OP',
+num_ops = ['INCREMENT_DEBUG_COUNTER_OP',
            'INT_LT_OP',
            'INT_LE_OP',
            'INT_EQ_OP',
@@ -75,14 +75,14 @@ int_ops = ['INCREMENT_DEBUG_COUNTER_OP',
            'INT_FORCE_GE_ZERO_OP',
            'INT_ADD_OVF_OP',
            'INT_SUB_OVF_OP',
-           'INT_MUL_OVF_OP']
+           'INT_MUL_OVF_OP',
+           'FLOAT_ADD_OP',
+           'FLOAT_SUB_OP',
+           'FLOAT_MUL_OP',
+           'FLOAT_TRUEDIV_OP',
+           'FLOAT_NEG_OP',
+           'FLOAT_ABS_OP']
 
-float_ops = [ 'FLOAT_ADD_OP',
-              'FLOAT_SUB_OP',
-              'FLOAT_MUL_OP',
-              'FLOAT_TRUEDIV_OP',
-              'FLOAT_NEG_OP',
-              'FLOAT_ABS_OP']
 
 alloc_ops = ['NEW_OP',             #-> GcStruct, gcptrs inside are zeroed (not the rest)
              'NEW_WITH_VTABLE_OP',  #-> GcStruct with vtable, gcptrs inside are zeroed
@@ -123,23 +123,21 @@ with open("histograms.dat", "r") as f:
                 # add to global list
                 prog_vecs[current_name] = vfunc(prog_vec)
             # reset 
-            prog_vec = np.zeros(7)
+            prog_vec = np.zeros(6)
             current_name = match_begin.group(1)
             continue
         elif split[0] in object_ops:
             index = 0
         elif split[0] in array_ops:
             index = 1
-        elif split[0] in int_ops:
+        elif split[0] in num_ops:
             index = 2
-        elif split[0] in float_ops:
-            index = 3
         elif split[0] in alloc_ops:
-            index = 4
+            index = 3
         elif split[0] == guard:
-            index = 5
+            index = 4
         elif split[0] == jump:
-            index = 6
+            index = 5
         else:
             continue
         counts[index] += 1
@@ -157,7 +155,7 @@ print "PERFORMING Kmeans"
 # initial = [kmeans(features,i) for i in range(1,40)]
 # pyplot.plot([var for (cent,var) in initial])
 # pyplot.show()
-centroids,_ =  kmeans(whitened, 6, 100)
+centroids,_ =  kmeans(whitened, 3, 100)
 
 # for x in np.nditer(centroids):
 #     print x
