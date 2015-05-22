@@ -1,6 +1,24 @@
 import re
 target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
 
+object_ops = [
+    
+    'GETFIELD_GC_PURE_OP',
+    'GETFIELD_RAW_PURE_OP',
+    
+    'GETINTERIORFIELD_GC_OP',
+    'RAW_LOAD_OP',
+    'GETFIELD_GC_OP',
+    'GETFIELD_RAW_OP',
+    
+
+
+    'RAW_STORE_OP',
+    'SETFIELD_GC_OP',
+    'ZERO_PTR_FIELD_OP' # only emitted by the rewrite, clears a pointer field
+                        # at a given constant offset, no descr
+    ]
+
 
 high_cost = ['ARRAYLEN_GC_OP',
     'STRLEN_OP',
@@ -50,6 +68,22 @@ def mem_cost(frag, i=None):
         elif op != "DEBUG_MERGE_POINT_OP":
             cost += 1
         j+=1
+    return cost
+
+def deriv_cost(frag, i=None):
+    if not i:
+        i = len(frag.ops)
+    j = 0
+    cost = 0
+    while j < i:
+        op = frag.ops[j].split()[0]
+        if op in object_ops:
+            cost += 861
+        elif op == "GUARD:":
+            cost += 88
+        elif op != "DEBUG_MERGE_POINT_OP":
+            cost += 1
+        j += 1
     return cost
 
 def null_cost(frag, i=None):

@@ -26,8 +26,7 @@ values = []
 times = []
 costs = {}
 run_costs = []
-
-Fragment.cost_fn = mem_cost
+Fragment.cost_fn = deriv_cost
 
 
 #TODO: write a proper parser
@@ -86,6 +85,7 @@ for arg in sys.argv[1:]:
     name = os.path.basename(arg)
     tsv_path = "CrossBenchmarks_pycket.tsv"
     average_time = 0
+    
     with open(tsv_path, "r") as f:
         tsv = csv.reader(f, delimiter = "\t")
         #bench name starts at 15th charcater of file name
@@ -134,7 +134,7 @@ for arg in sys.argv[1:]:
 
     with open("whole_program.dat", "a") as f:
         cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)
-        f.write(str(cost) + " " + str(average_time) + " " +  name "\n")
+        f.write(str(cost) + " " + str(average_time) + " " +  name + "\n")
 
 
     
