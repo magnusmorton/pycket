@@ -1,3 +1,4 @@
+import argparse
 import csv
 import re
 import sys
@@ -26,11 +27,24 @@ values = []
 times = []
 costs = {}
 run_costs = []
-Fragment.cost_fn = deriv_cost
+
+parser = argparse.ArgumentParser(description="Run cost analysis")
+parser.add_argument("filenames", metavar="<file>", nargs = '+')
+parser.add_argument("--model", "-m",  default="cm0")
+parser.add_argument("--vector", "-v", default="")
+parser.add_argument("--alpha", "-a", default="")
+args = parser.parse_args()
+if args.model == "cm1":
+    Fragment.cost_fn = simple_cost
+elif args.model == "cm2":
+    Fragment.cost_fn = mem_cost
+else:
+    Fragment.cost_fn = null_cost
+    
 
 
 #TODO: write a proper parser
-for arg in sys.argv[1:]:
+for arg in args.filenames:
     print arg
     run = {}
     counts = {}
