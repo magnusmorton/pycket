@@ -81,22 +81,24 @@ for arg in sys.argv[1:]:
             line = f.readline()
    
 
-    # get times from tsv file
+    # get times from tsv file(s)
     name = os.path.basename(arg)
-    tsv_path = "CrossBenchmarks_pycket.tsv"
+    tsv_paths = ["CrossBenchmarks_pycket.tsv", "Shootout_pycket.tsv"]
     average_time = 0
-    
-    with open(tsv_path, "r") as f:
-        tsv = csv.reader(f, delimiter = "\t")
-        #bench name starts at 15th charcater of file name
-        benchname = name #[14:]
-        times  = []
-        for line in tsv:
-            #pdb.set_trace()
-            if len(line) >= 5 and line[4] == benchname and line[3] == "total":
-                times.append(float(line[1]))
-        #pdb.set_trace()
-        average_time = sum(times)/float(len(times))
+
+    # TODO: move this out of loop and build dictionary
+    for tsv_path in tsv_paths:
+        with open(tsv_path, "r") as f:
+            tsv = csv.reader(f, delimiter = "\t")
+            #bench name starts at 15th charcater of file name. Sometimes
+            benchname = name #[14:]
+            times  = []
+            for line in tsv:
+                #pdb.set_trace()
+                if len(line) >= 5 and line[4] == benchname and line[3] == "total":
+                    times.append(float(line[1]))
+                    #pdb.set_trace()
+                    average_time = sum(times)/float(len(times))
         
     
     # build fragments for each trace, flatten the list and turn it into a dic
