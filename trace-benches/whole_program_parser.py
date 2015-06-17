@@ -24,7 +24,6 @@ times_re = re.compile("\s*(\d*\.\d*) seconds time elapsed")
 looptoken_re = re.compile("<Loop(\d*)>")
 
 values = []
-times = []
 costs = {}
 run_costs = []
 
@@ -42,6 +41,27 @@ else:
     Fragment.cost_fn = null_cost
     
 
+tsv_paths = ["CrossBenchmarks_pycket.tsv", "Shootout_pycket.tsv"]
+
+
+
+# TODO: move this out of loop and build dictionary
+times_dict = {}
+for tsv_path in tsv_paths:
+    with open(tsv_path, "r") as f:
+        tsv = csv.reader(f, delimiter = "\t")
+        
+        for line in tsv:
+            #pdb.set_trace()
+            # line[4] is the name of the benchmark
+            if len(line) >= 5 and line[3] == "total":
+                if line[4] not in times_dict:
+                    times_dict[line[4]] = []
+                times_dict[line[4]].append(float(line[1]))
+
+
+                    
+average_times = {name: sum(times)/float(len(times)) for name, times in times_dict.iteritems()}
 
 #TODO: write a proper parser
 for arg in args.filenames:
@@ -96,24 +116,6 @@ for arg in args.filenames:
    
 
     # get times from tsv file(s)
-    name = os.path.basename(arg)
-    tsv_paths = ["CrossBenchmarks_pycket.tsv", "Shootout_pycket.tsv"]
-    average_time = 0
-
-    # TODO: move this out of loop and build dictionary
-    for tsv_path in tsv_paths:
-        with open(tsv_path, "r") as f:
-            tsv = csv.reader(f, delimiter = "\t")
-            #bench name starts at 15th charcater of file name. Sometimes
-            benchname = name #[14:]
-            times  = []
-            for line in tsv:
-                #pdb.set_trace()
-                if len(line) >= 5 and line[4] == benchname and line[3] == "total":
-                    times.append(float(line[1]))
-                    #pdb.set_trace()
-                    average_time = sum(times)/float(len(times))
-        
     
     # build fragments for each trace, flatten the list and turn it into a dic
     frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
@@ -146,11 +148,11 @@ for arg in args.filenames:
                             costs[hash(value) + 3] = guard_cost
                     eqn[hash(value)] = count
                     costs[hash(frag)] = frag.cost()
-                
+    name = os.path.basename(arg)
 
     with open("whole_program.dat", "a") as f:
         cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)
-        f.write(str(cost) + " " + str(average_time) + " " +  name + "\n")
+        f.write(str(cost) + " " + str(average_times[name]) + " " +  name + "\n")
 
 
     
