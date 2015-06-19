@@ -2,9 +2,19 @@ import argparse
 import csv
 import re
 import operator
+import numpy as np
 import os.path
 
+from scipy import stats
+
 import trace
+
+
+loop_re = re.compile(r"LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*)")
+bridge_re = re.compile(r"BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
+counts_re = re.compile(r"loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
+times_re = re.compile(r"\s*(\d*\.\d*) seconds time elapsed")
+looptoken_re = re.compile(r"<Loop(\d*)>")
 
 
 def calculate_average_times():
@@ -24,7 +34,6 @@ def calculate_average_times():
 
 def parse_files(filenames):
     all_traces = []
-    #TODO: write a proper parser
     for arg in filenames:
         print arg
         counts = {}
@@ -70,25 +79,72 @@ def parse_files(filenames):
         all_traces.append(trace.Program(name, frags, counts, entry_points))
     return all_traces
 
-loop_re = re.compile(r"LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*)")
-bridge_re = re.compile(r"BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COST: (?P<cost>.*)")
 
-counts_re = re.compile(r"loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
-times_re = re.compile(r"\s*(\d*\.\d*) seconds time elapsed")
-looptoken_re = re.compile(r"<Loop(\d*)>")
+def fit(costs, times):
+    x = np.array(costs)
+    y = np.array(times)
+    _,_,r,_,_ = stats.linregress(x,y)
+    return r**2
 
-values = []
-costs = {}
-run_costs = []
 
-parser = argparse.ArgumentParser(description="Run cost analysis")
-parser.add_argument("filenames", metavar="<file>", nargs = '+')
-parser.add_argument("--start", "-s",  default="0,0,0,0,0")
-parser.add_argument("--end", "-e", default="100,100,100,100,100")
+def models(start, end, cap):
+    current = list(start)
+    while current != end:
+        i = 0
+        while i < len(current):
+            if current[i] < cap:
+                current[i] += 1
+                yield current
+            i += 1
 
-args = parser.parse_args()
-average_times = calculate_average_times()
-programs = parse_files(args.filenames)
+def combinations_with_replacement(iterable, r, start=None):
+    # combinations_with_replacement('ABC', 2) --> AA AB AC BB BC CC                                                                                   
+    pool = tuple(iterable)
+    n = len(pool)
+    if not n and r:
+        return
+    if start is None:
+        indices = [0] * r
+    else:
+        assert len(start) == r
+        indices = [pool.index(l) for l in start]
+    yield tuple(pool[i] for i in indices)
+    while True:
+        for i in reversed(range(r)):
+            if indices[i] != n - 1:
+                break
+        else:
+            return
+        indices[i:] = [indices[i] + 1] * (r - i)
+        yield tuple(pool[i] for i in indices)
+        
+
+def main():
+    parser = argparse.ArgumentParser(description="Run cost analysis")
+    parser.add_argument("filenames", metavar="<file>", nargs = '+')
+    parser.add_argument("--start", "-s",  default="0,0,0,0,0")
+    parser.add_argument("--cap", "-c", default="10")
+
+
+    args = parser.parse_args()
+    start = [int(num) for num in args.start.split(",")]
+    average_times = calculate_average_times()
+    programs = parse_files(args.filenames)
+
+    best = ()
+    print "Beginning search...."
+    for model in combinations_with_replacement(range(int(args.cap) + 1), 5, start):
+        print "current model:", model
+        trace.Fragment.model = model
+        costs = [program.cost() for program in programs]
+        rsq = fit(costs, average_times)
+        if rsq < best[1]:
+            best = (model, rsq)
+
+
+
+if __name__ == '__main__':
+    main()
 
     
 
