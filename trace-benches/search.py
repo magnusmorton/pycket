@@ -86,17 +86,6 @@ def fit(costs, times):
     _,_,r,_,_ = stats.linregress(x,y)
     return r**2
 
-
-def models(start, end, cap):
-    current = list(start)
-    while current != end:
-        i = 0
-        while i < len(current):
-            if current[i] < cap:
-                current[i] += 1
-                yield current
-            i += 1
-
 def combinations_with_replacement(iterable, r, start=None):
     # combinations_with_replacement('ABC', 2) --> AA AB AC BB BC CC                                                                                   
     pool = tuple(iterable)
