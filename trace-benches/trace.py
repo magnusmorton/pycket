@@ -1,24 +1,7 @@
+import instructions
 import re
+
 target_token_re = re.compile(r".*TargetToken\((?P<tt_val>\d*)\)")
-
-object_ops = [
-    
-    'GETFIELD_GC_PURE_OP',
-    'GETFIELD_RAW_PURE_OP',
-    
-    'GETINTERIORFIELD_GC_OP',
-    'RAW_LOAD_OP',
-    'GETFIELD_GC_OP',
-    'GETFIELD_RAW_OP',
-    
-
-
-    'RAW_STORE_OP',
-    'SETFIELD_GC_OP',
-    'ZERO_PTR_FIELD_OP' # only emitted by the rewrite, clears a pointer field
-                        # at a given constant offset, no descr
-    ]
-
 
 high_cost = ['ARRAYLEN_GC_OP',
     'STRLEN_OP',
@@ -77,7 +60,7 @@ def deriv_cost(frag, i=None):
     cost = 0
     while j < i:
         op = frag.ops[j].split()[0]
-        if op in object_ops:
+        if op in instructions.object_ops:
             cost += 861
         elif op == "GUARD:":
             cost += 88
@@ -134,12 +117,39 @@ class Bridge(Trace):
         return super(Bridge, self).get_fragments(guards, self.guard)
 
 class Fragment(object):
-    cost_fn = simple_cost
+    cost_fn = cost_with_model
+    model = None
     def __init__(self, ops, label, guards):
         self.ops = ops
         self.label = label
         self.guards = guards
 
+
+    def cost_with_model(self, i=None):
+        if not Fragment.model:
+            raise "Model not defined"
+        # order is [order, array, num, alloc, guards]
+        if not i:
+            i = len(self.ops)
+        j = 0
+        cost = 0
+        while j < i:
+            op = self.ops[j].split()[0]
+            if op in instructions.object_ops:
+                cost += Fragment.model[0]
+            elif op in instructions.array_ops:
+                cost += Fragment.model[1]
+            elif op in instructions.num_ops:
+                cost += Fragment.model[2]
+            elif op in instructions.alloc_ops:
+                cost += Fragment.model[3]
+            elif op == "GUARD:":
+                cost += Fragment.model[4]
+            j += 1
+            return cost
+
+        
+        
 
     def cost(self):
         return Fragment.cost_fn(self)
@@ -162,9 +172,40 @@ class Program(object):
         self.fragments = fragments
         self.counts = counts
         self.entry_points = entry_points
-        
 
-    
+    def cost(self):
+        frag_costs = {}
+        eqn = {}
+        for key, value in self.counts.iteritems():
+            if value:
+                if key in self.fragments:
+                    frag = self.fragments[key]
+                    for key2,value2 in self.counts.iteritems():
+                        if key2 in frag.guards:
+                            guard_cost = frag.cost2guard(key2)
+                            value = value - value2
+                            eqn[hash(frag) + 3] = value2
+                            frag_costs[hash(frag) + 3] = guard_cost
+                    eqn[hash(frag)] =  value
+                    frag_costs[hash(frag)] = frag.cost()
+
+        # special case for loops with no labels
+        if len(self.fragments) > len(self.counts):
+            for key, value in self.fragments.iteritems():
+                if key in self.entry_points:
+                    count = self.entry_points[key]
+                    if count:
+                        for key2,value2 in self.counts.iteritems():
+                            if key2 in frag.guards:
+                                guard_cost = frag.cost2guard(key2)
+                                count = count - value2
+                                eqn[hash(value) + 3] = value2
+                                frag_costs[hash(value) + 3] = guard_cost
+                        eqn[hash(value)] = count
+                        frag_costs[hash(frag)] = frag.cost()
+
+        return reduce(lambda x, y: x + eqn[y] * frag_costs[y], eqn,0)
+            
 def build_trace(fd, guard=0, token=None):
     ops = []
     line = fd.readline().rstrip()

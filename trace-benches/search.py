@@ -83,63 +83,12 @@ run_costs = []
 
 parser = argparse.ArgumentParser(description="Run cost analysis")
 parser.add_argument("filenames", metavar="<file>", nargs = '+')
-parser.add_argument("--model", "-m",  default="cm0")
-parser.add_argument("--vector", "-v", default="")
-parser.add_argument("--alpha", "-a", default="")
+parser.add_argument("--start", "-s",  default="0,0,0,0,0")
+parser.add_argument("--end", "-e", default="100,100,100,100,100")
+
 args = parser.parse_args()
-if args.model == "cm1":
-    trace.Fragment.cost_fn = trace.simple_cost
-elif args.model == "cm2":
-    trace.Fragment.cost_fn = trace.mem_cost
-else:
-    trace.Fragment.cost_fn = trace.null_cost
-    
-
-
 average_times = calculate_average_times()
 programs = parse_files(args.filenames)
-
-
-def apply_costs():
-    for program in programs:
-        frags = program.frags
-        counts = program.counts
-        name = program.name
-        entry_points = program.entry_points
-        eqn = {}
-        for key, value in counts.iteritems():
-            if value:
-                if key in frags:
-                    frag = frags[key]
-                    for key2,value2 in counts.iteritems():
-                        if key2 in frag.guards:
-                            guard_cost = frag.cost2guard(key2)
-                            value = value - value2
-                            eqn[hash(frag) + 3] = value2
-                            costs[hash(frag) + 3] = guard_cost
-                    eqn[hash(frag)] =  value
-                    costs[hash(frag)] = frag.cost()
-
-        # special case for loops with no labels
-        if len(frags) > len(counts):
-            for key, value in frags.iteritems():
-                if key in entry_points:
-                    count = entry_points[key]
-                    if count:
-                        for key2,value2 in counts.iteritems():
-                            if key2 in frag.guards:
-                                guard_cost = frag.cost2guard(key2)
-                                count = count - value2
-                                eqn[hash(value) + 3] = value2
-                                costs[hash(value) + 3] = guard_cost
-                        eqn[hash(value)] = count
-                        costs[hash(frag)] = frag.cost()
-
-
-    # with open("whole_program.dat", "a") as f:
-    #     cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)
-    #     f.write(str(cost) + " " + str(average_times[name]) + " " +  name + "\n")
-
 
     
 
