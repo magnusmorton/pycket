@@ -117,7 +117,6 @@ class Bridge(Trace):
         return super(Bridge, self).get_fragments(guards, self.guard)
 
 class Fragment(object):
-    cost_fn = cost_with_model
     model = None
     def __init__(self, ops, label, guards):
         self.ops = ops
@@ -128,6 +127,8 @@ class Fragment(object):
     def cost_with_model(self, i=None):
         if not Fragment.model:
             raise "Model not defined"
+        if Fragment.model == (0,0,0,0,0):
+            return 1
         # order is [order, array, num, alloc, guards]
         if not i:
             i = len(self.ops)
@@ -146,8 +147,9 @@ class Fragment(object):
             elif op == "GUARD:":
                 cost += Fragment.model[4]
             j += 1
-            return cost
+        return cost
 
+    cost_fn = cost_with_model
         
         
 

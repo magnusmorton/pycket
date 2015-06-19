@@ -7,7 +7,7 @@ import os.path
 
 from scipy import stats
 
-import trace
+import trace as trace_utils
 
 
 loop_re = re.compile(r"LOOP - HASH: (?P<hash>.*) TT: (?P<tt>.*) COST: (?P<cost>.*)")
@@ -50,16 +50,16 @@ def parse_files(filenames):
                     traces = []
                     guards = []
                     entry_points = {}
-                    m_times = times_re.match(line)
-                    m_counts = counts_re.match(line.rstrip())
+                m_times = times_re.match(line)
+                m_counts = counts_re.match(line.rstrip())
                 if line[0:4] == 'LOOP':
                     tokens = line.split()
                     looptoken = int(looptoken_re.match(tokens[1]).group(1))
-                    traces.append(trace.build_trace(f, token=looptoken))
+                    traces.append(trace_utils.build_trace(f, token=looptoken))
                 elif line[0:6] == 'BRIDGE':
                     tokens = line.split()
                     guard = tokens[1]
-                    traces.append(trace.build_trace(f, guard=guard))
+                    traces.append(trace_utils.build_trace(f, guard=guard))
                 if m_times:
                     run_times.append(float(m_times.group(1)))
                 if m_counts:
@@ -67,20 +67,22 @@ def parse_files(filenames):
                     if count > 0:
                         if m_counts.group(1) == 'e':
                             entry_points[int(m_counts.group("fragment"))] = count
-                            counts[int(m_counts.group("fragment"))] = count
-                            if m_counts.group(1) == 'b':
-                                guards.append(int(m_counts.group("fragment")))
-                                line = f.readline()
+                        counts[int(m_counts.group("fragment"))] = count
+                        if m_counts.group(1) == 'b':
+                            guards.append(int(m_counts.group("fragment")))
+                line = f.readline()
 
 
         # build fragments for each trace, flatten the list and turn it into a dic
         frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
         name = os.path.basename(arg)
-        all_traces.append(trace.Program(name, frags, counts, entry_points))
+        all_traces.append(trace_utils.Program(name, frags, counts, entry_points))
     return all_traces
 
 
 def fit(costs, times):
+    # import pdb
+    # pdb.set_trace()
     x = np.array(costs)
     y = np.array(times)
     _,_,r,_,_ = stats.linregress(x,y)
@@ -120,16 +122,20 @@ def main():
     average_times = calculate_average_times()
     programs = parse_files(args.filenames)
 
-    best = ()
+    best = None
     print "Beginning search...."
     for model in combinations_with_replacement(range(int(args.cap) + 1), 5, start):
         print "current model:", model
-        trace.Fragment.model = model
+        trace_utils.Fragment.model = model
         costs = [program.cost() for program in programs]
-        rsq = fit(costs, average_times)
-        if rsq < best[1]:
+        times = [average_times[program.name] for program in programs]
+        rsq = fit(costs, times)
+        print "rsq", rsq
+        if not best:
             best = (model, rsq)
-
+        elif rsq < best[1]:
+            best = (model, rsq)
+    print "Best:", best
 
 
 if __name__ == '__main__':
