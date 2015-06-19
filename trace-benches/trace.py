@@ -1,5 +1,5 @@
 import re
-target_token_re = re.compile(".*TargetToken\((?P<tt_val>\d*)\)")
+target_token_re = re.compile(r".*TargetToken\((?P<tt_val>\d*)\)")
 
 object_ops = [
     
@@ -156,6 +156,15 @@ class Fragment(object):
             hash_num += hash(op.split()[0])
         return hash_num
 
+class Program(object):
+    def __init__(self, name, fragments, counts, entry_points):
+        self.name = name
+        self.fragments = fragments
+        self.counts = counts
+        self.entry_points = entry_points
+        
+
+    
 def build_trace(fd, guard=0, token=None):
     ops = []
     line = fd.readline().rstrip()
