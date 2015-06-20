@@ -5,6 +5,9 @@ import operator
 import numpy as np
 import os.path
 import time
+import signal
+import sys
+from itertools import izip
 
 from scipy import stats
 
@@ -131,13 +134,17 @@ def main():
     average_times = calculate_average_times()
     programs = parse_files(args.filenames)
     counts = {program.name: program.class_counts() for program in programs}
+    dot = lambda x,y: sum(a*b for a,b in izip(x,y))
     best = None
+    def handler(s, frame):
+        print "Terminated... Current best:", best
+        sys.exit(0)
+    signal.signal(signal.SIGINT, handler)
     print "Beginning search...."
     for model in models(start,end,args.cap):
-        now = time.clock()
         print "current model:", model
         trace_utils.Fragment.model = model
-        costs = [program.cost() for program in programs]
+        costs = [dot(counts[program.name], model) for program in programs]
         times = [average_times[program.name] for program in programs]
         rsq = fit(costs, times)
         print "rsq", rsq
@@ -145,7 +152,7 @@ def main():
             best = (model, rsq)
         elif rsq > best[1]:
             best = (model, rsq)
-        print "time", time.clock() - now
+       
     print "Best:", best
 
 

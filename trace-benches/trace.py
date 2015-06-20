@@ -211,8 +211,8 @@ class Program(object):
                             guard_cost = frag.cost2guard(key2)
                             value = value - value2
                             # bug here - just add the key instead
-                            eqn[hash(frag) + key2] = value2
-                            frag_costs[hash(frag) + key2] = guard_cost
+                            eqn[hash(frag) + hash(key2)] = value2
+                            frag_costs[hash(frag) + hash(key2)] = guard_cost
                     eqn[hash(frag)] =  value
                     frag_costs[hash(frag)] = frag.cost()
 
@@ -226,8 +226,8 @@ class Program(object):
                             if key2 in frag.guards:
                                 guard_cost = frag.cost2guard(key2)
                                 count = count - value2
-                                eqn[hash(value) + key2] = value2
-                                frag_costs[hash(value) + key2] = guard_cost
+                                eqn[hash(value) + hash(key2)] = value2
+                                frag_costs[hash(value) + hash(key2)] = guard_cost
                         eqn[hash(value)] = count
                         frag_costs[hash(frag)] = frag.cost()
 
@@ -267,7 +267,7 @@ class Program(object):
         # sum all lists in frag_counts
         add_lists = lambda a, b: map(op.add, a, b)
         scal_mul = lambda s, a: [s*i for i in a]
-        return reduce( lambda x, y: add_lists(x, scal_mul(eqn[y], frag_counts[y])), eqn)
+        return reduce( lambda x, y: add_lists(x, scal_mul(eqn[y], frag_counts[y])), eqn, [0,0,0,0,0])
 
             
 def build_trace(fd, guard=0, token=None):
