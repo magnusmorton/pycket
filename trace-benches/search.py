@@ -130,7 +130,7 @@ def main():
     end = [int(num) for num in args.end.split(",")]
     average_times = calculate_average_times()
     programs = parse_files(args.filenames)
-
+    counts = {program.name: program.class_counts() for program in programs}
     best = None
     print "Beginning search...."
     for model in models(start,end,args.cap):

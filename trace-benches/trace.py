@@ -1,5 +1,6 @@
 import instructions
 import re
+import operator as op
 
 target_token_re = re.compile(r".*TargetToken\((?P<tt_val>\d*)\)")
 
@@ -144,6 +145,9 @@ class Fragment(object):
         return counts
 
 
+    def count2guard(self, guard):
+        return self.class_counts(self.guards[guard])
+
     def cost_with_model(self, i=None):
         if not Fragment.model:
             raise "Model not defined"
@@ -206,8 +210,9 @@ class Program(object):
                         if key2 in frag.guards:
                             guard_cost = frag.cost2guard(key2)
                             value = value - value2
-                            eqn[hash(frag) + 3] = value2
-                            frag_costs[hash(frag) + 3] = guard_cost
+                            # bug here - just add the key instead
+                            eqn[hash(frag) + key2] = value2
+                            frag_costs[hash(frag) + key2] = guard_cost
                     eqn[hash(frag)] =  value
                     frag_costs[hash(frag)] = frag.cost()
 
@@ -221,15 +226,15 @@ class Program(object):
                             if key2 in frag.guards:
                                 guard_cost = frag.cost2guard(key2)
                                 count = count - value2
-                                eqn[hash(value) + 3] = value2
-                                frag_costs[hash(value) + 3] = guard_cost
+                                eqn[hash(value) + key2] = value2
+                                frag_costs[hash(value) + key2] = guard_cost
                         eqn[hash(value)] = count
                         frag_costs[hash(frag)] = frag.cost()
 
         return reduce(lambda x, y: x + eqn[y] * frag_costs[y], eqn,0)
 
     def class_counts(self):
-        frag_costs = {}
+        frag_counts = {}
         eqn = {}
         for key, value in self.counts.iteritems():
             if value:
@@ -237,12 +242,12 @@ class Program(object):
                     frag = self.fragments[key]
                     for key2,value2 in self.counts.iteritems():
                         if key2 in frag.guards:
-                            guard_cost = frag.cost2guard(key2)
+                            guard_count = frag.count2guard(key2)
                             value = value - value2
-                            eqn[hash(frag) + 3] = value2
-                            frag_costs[hash(frag) + 3] = guard_cost
+                            eqn[hash(frag) + hash(key2)] = value2
+                            frag_counts[hash(frag) + hash(key2)] = guard_count
                     eqn[hash(frag)] =  value
-                    frag_costs[hash(frag)] = frag.cost()
+                    frag_counts[hash(frag)] = frag.class_counts()
 
         # special case for loops with no labels
         if len(self.fragments) > len(self.counts):
@@ -252,14 +257,18 @@ class Program(object):
                     if count:
                         for key2,value2 in self.counts.iteritems():
                             if key2 in frag.guards:
-                                guard_cost = frag.cost2guard(key2)
+                                guard_count = frag.count2guard(key2)
                                 count = count - value2
-                                eqn[hash(value) + 3] = value2
-                                frag_costs[hash(value) + 3] = guard_cost
+                                eqn[hash(value) + hash(key2)] = value2
+                                frag_counts[hash(value) + hash(key2)] = guard_count
                         eqn[hash(value)] = count
-                        frag_costs[hash(frag)] = frag.cost()
+                        frag_counts[hash(frag)] = frag.class_counts()
 
-        return reduce(lambda x, y: x + eqn[y] * frag_costs[y], eqn,0)
+        # sum all lists in frag_counts
+        add_lists = lambda a, b: map(op.add, a, b)
+        scal_mul = lambda s, a: [s*i for i in a]
+        return reduce( lambda x, y: add_lists(x, scal_mul(eqn[y], frag_counts[y])), eqn)
+
             
 def build_trace(fd, guard=0, token=None):
     ops = []
