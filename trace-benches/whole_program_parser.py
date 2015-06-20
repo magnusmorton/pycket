@@ -126,7 +126,7 @@ for arg in args.filenames:
             if key in frags:
                 frag = frags[key]
                 for key2,value2 in counts.iteritems():
-                    if key2 in frag.guards:
+                   if key2 in frag.guards:
                         guard_cost = frag.cost2guard(key2)
                         value = value - value2
                         eqn[hash(frag) + 3] = value2
@@ -149,6 +149,8 @@ for arg in args.filenames:
                     eqn[hash(value)] = count
                     costs[hash(frag)] = frag.cost()
     name = os.path.basename(arg)
+    import pdb
+    pdb.set_trace()
 
     with open("whole_program.dat", "a") as f:
         cost = reduce(lambda x, y: x + eqn[y] * costs[y], eqn,0)

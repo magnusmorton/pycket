@@ -242,10 +242,11 @@ class Program(object):
                     frag = self.fragments[key]
                     for key2,value2 in self.counts.iteritems():
                         if key2 in frag.guards:
+                            #for each bridge in the counts, subtract its count for 
                             guard_count = frag.count2guard(key2)
                             value = value - value2
-                            eqn[hash(frag) + hash(key2)] = value2
-                            frag_counts[hash(frag) + hash(key2)] = guard_count
+                            eqn[hash(frag) + key2] = value2
+                            frag_counts[hash(frag) + key2] = guard_count
                     eqn[hash(frag)] =  value
                     frag_counts[hash(frag)] = frag.class_counts()
 
@@ -259,8 +260,8 @@ class Program(object):
                             if key2 in frag.guards:
                                 guard_count = frag.count2guard(key2)
                                 count = count - value2
-                                eqn[hash(value) + hash(key2)] = value2
-                                frag_counts[hash(value) + hash(key2)] = guard_count
+                                eqn[hash(value) + key2] = value2
+                                frag_counts[hash(value) + key2] = guard_count
                         eqn[hash(value)] = count
                         frag_counts[hash(frag)] = frag.class_counts()
 
