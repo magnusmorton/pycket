@@ -123,6 +123,26 @@ class Fragment(object):
         self.label = label
         self.guards = guards
 
+    def class_counts(self, i=None):
+        if not i:
+            i = len(self.ops)
+        j = 0
+        counts = [0]*5
+        while j < i:
+            op = self.ops[j].split()[0]
+            if op in instructions.object_ops:
+                counts[0] += 1
+            elif op in instructions.array_ops:
+                counts[1] += 1
+            elif op in instructions.num_ops:
+                counts[2] += 1
+            elif op in instructions.alloc_ops:
+                counts[3] += 1
+            elif op == "GUARD:":
+                counts[4] += 1
+            j += 1
+        return counts
+
 
     def cost_with_model(self, i=None):
         if not Fragment.model:
@@ -176,6 +196,39 @@ class Program(object):
         self.entry_points = entry_points
 
     def cost(self):
+        frag_costs = {}
+        eqn = {}
+        for key, value in self.counts.iteritems():
+            if value:
+                if key in self.fragments:
+                    frag = self.fragments[key]
+                    for key2,value2 in self.counts.iteritems():
+                        if key2 in frag.guards:
+                            guard_cost = frag.cost2guard(key2)
+                            value = value - value2
+                            eqn[hash(frag) + 3] = value2
+                            frag_costs[hash(frag) + 3] = guard_cost
+                    eqn[hash(frag)] =  value
+                    frag_costs[hash(frag)] = frag.cost()
+
+        # special case for loops with no labels
+        if len(self.fragments) > len(self.counts):
+            for key, value in self.fragments.iteritems():
+                if key in self.entry_points:
+                    count = self.entry_points[key]
+                    if count:
+                        for key2,value2 in self.counts.iteritems():
+                            if key2 in frag.guards:
+                                guard_cost = frag.cost2guard(key2)
+                                count = count - value2
+                                eqn[hash(value) + 3] = value2
+                                frag_costs[hash(value) + 3] = guard_cost
+                        eqn[hash(value)] = count
+                        frag_costs[hash(frag)] = frag.cost()
+
+        return reduce(lambda x, y: x + eqn[y] * frag_costs[y], eqn,0)
+
+    def class_counts(self):
         frag_costs = {}
         eqn = {}
         for key, value in self.counts.iteritems():

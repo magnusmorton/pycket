@@ -4,6 +4,7 @@ import re
 import operator
 import numpy as np
 import os.path
+import time
 
 from scipy import stats
 
@@ -79,7 +80,35 @@ def parse_files(filenames):
         all_traces.append(trace_utils.Program(name, frags, counts, entry_points))
     return all_traces
 
+def half_add(a, b, cap):
+    s = a + b
+    r = s - cap
+    c = 0
+    if r >= 0:
+        c = 1
+        s = r
+    return (s, c)
 
+def full_add(a, b, cap):
+    pairs = zip(a,b)
+    pairs.reverse()
+    result = []
+    carry = 0
+    for pair in pairs:
+        res = half_add(pair[0], pair[1] + carry, cap)
+        result.append(res[0])
+        carry = res[1]
+    result.reverse()
+    return result
+        
+
+def models(start, end, cap):
+    current = list(start)
+    while current != end:
+        current = full_add(current, [0,0,0,0,1], cap)
+        yield current
+
+        
 def fit(costs, times):
     # import pdb
     # pdb.set_trace()
@@ -88,43 +117,24 @@ def fit(costs, times):
     _,_,r,_,_ = stats.linregress(x,y)
     return r**2
 
-def combinations_with_replacement(iterable, r, start=None):
-    # combinations_with_replacement('ABC', 2) --> AA AB AC BB BC CC                                                                                   
-    pool = tuple(iterable)
-    n = len(pool)
-    if not n and r:
-        return
-    if start is None:
-        indices = [0] * r
-    else:
-        assert len(start) == r
-        indices = [pool.index(l) for l in start]
-    yield tuple(pool[i] for i in indices)
-    while True:
-        for i in reversed(range(r)):
-            if indices[i] != n - 1:
-                break
-        else:
-            return
-        indices[i:] = [indices[i] + 1] * (r - i)
-        yield tuple(pool[i] for i in indices)
-        
-
 def main():
     parser = argparse.ArgumentParser(description="Run cost analysis")
     parser.add_argument("filenames", metavar="<file>", nargs = '+')
     parser.add_argument("--start", "-s",  default="0,0,0,0,0")
-    parser.add_argument("--cap", "-c", default="10")
+    parser.add_argument("--end", "-e",  default="1,0,0,0,0")
+    parser.add_argument("--cap", "-c", default=11)
 
 
     args = parser.parse_args()
     start = [int(num) for num in args.start.split(",")]
+    end = [int(num) for num in args.end.split(",")]
     average_times = calculate_average_times()
     programs = parse_files(args.filenames)
 
     best = None
     print "Beginning search...."
-    for model in combinations_with_replacement(range(int(args.cap) + 1), 5, start):
+    for model in models(start,end,args.cap):
+        now = time.clock()
         print "current model:", model
         trace_utils.Fragment.model = model
         costs = [program.cost() for program in programs]
@@ -133,8 +143,9 @@ def main():
         print "rsq", rsq
         if not best:
             best = (model, rsq)
-        elif rsq < best[1]:
+        elif rsq > best[1]:
             best = (model, rsq)
+        print "time", time.clock() - now
     print "Best:", best
 
 
