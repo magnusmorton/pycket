@@ -252,7 +252,8 @@ class Program(object):
 
         # special case for loops with no labels
         if len(self.fragments) > len(self.counts):
-            for key, value in self.fragments.iteritems():
+            print "NO LABEL LOOP FOUND", self.name
+            for key, frag in self.fragments.iteritems():
                 if key in self.entry_points:
                     count = self.entry_points[key]
                     if count:
@@ -260,9 +261,9 @@ class Program(object):
                             if key2 in frag.guards:
                                 guard_count = frag.count2guard(key2)
                                 count = count - value2
-                                eqn[hash(value) + key2] = value2
-                                frag_counts[hash(value) + key2] = guard_count
-                        eqn[hash(value)] = count
+                                eqn[hash(frag) + key2] = value2
+                                frag_counts[hash(frag) + key2] = guard_count
+                        eqn[hash(frag)] = count
                         frag_counts[hash(frag)] = frag.class_counts()
 
         # sum all lists in frag_counts

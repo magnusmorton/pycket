@@ -22,7 +22,7 @@ def half_add(a, b, cap):
         s = r
     return (s, c)
 
-def full_add(a, b, cap):
+def full_add(a, b, cap, step):
     pairs = zip(a,b)
     pairs.reverse()
     result = []
@@ -30,15 +30,15 @@ def full_add(a, b, cap):
     for pair in pairs:
         res = half_add(pair[0], pair[1] + carry, cap)
         result.append(res[0])
-        carry = res[1]
+        carry = res[1] * step
     result.reverse()
     return result
         
 
-def models(start, end, cap):
+def models(start, end, cap, step):
     current = list(start)
     while current != end:
-        current = full_add(current, [0,0,0,0,1], cap)
+        current = full_add(current, step, cap, step[-1])
         yield current
 
         
@@ -55,12 +55,13 @@ def main():
     parser.add_argument("filenames", metavar="<file>", nargs = '+')
     parser.add_argument("--start", "-s",  default="0,0,0,0,0")
     parser.add_argument("--end", "-e",  default="1,0,0,0,0")
-    parser.add_argument("--cap", "-c", default=11)
-
-
+    parser.add_argument("--cap", "-c", default=11, type=int)
+    parser.add_argument("--step", "-t", default=1, type=int)
+    
     args = parser.parse_args()
     start = [int(num) for num in args.start.split(",")]
     end = [int(num) for num in args.end.split(",")]
+    step = [0,0,0,0,args.step]
     average_times = trace_parser.calculate_average_times()
     programs = trace_parser.parse_files(args.filenames)
     counts = {program.name: program.class_counts() for program in programs}
@@ -72,13 +73,11 @@ def main():
     signal.signal(signal.SIGINT, handler)
     print "Beginning search...."
     then = time.clock()
-    for model in models(start,end,args.cap):
-        print "current model:", model
+    for model in models(start,end,args.cap, step):
         trace_utils.Fragment.model = model
         costs = [dot(counts[program.name], model) for program in programs]
         times = [average_times[program.name] for program in programs]
         rsq = fit(costs, times)
-        print "rsq", rsq
         if not best:
             best = (model, rsq)
         elif rsq > best[1]:
