@@ -105,7 +105,7 @@ class Solution(object):
 
     def mutate(self):
         for i in xrange(len(self.model)):
-            if random.randint(0,100) == 0:
+            if random.randint(0,50) == 0:
                 self.model[i] = random.randint(0,MAX)
         self._fitness = None
         return self
@@ -135,6 +135,8 @@ def ga_search(programs,average_times, counts):
     population  = initialize(SIZE)
     initial = copy.deepcopy(population)
     max_key = lambda a: a.fitness()
+    best_rsq = 0
+    best = None
     for i in xrange(generations):
         if i % 100 == 0:
             print "generation:", i
@@ -142,6 +144,10 @@ def ga_search(programs,average_times, counts):
                 print solution
         new_pop = []
         elite = max(population, key=max_key)
+        if not best:
+            best = elite
+        elif elite.fitness() > best.fitness():
+            best = elite
         new_pop.append(elite)
         while len(new_pop) < SIZE:
             father = selection(population)
@@ -149,7 +155,8 @@ def ga_search(programs,average_times, counts):
             new_pop.extend(cross(father,mother))
         population = [solution.mutate() for solution in new_pop]
     elite = max(population, key=max_key)
-    print "Best:", elite.model, elite.fitness()
+    print "Elite:", elite.model, elite.fitness()
+    print "Best:", best.model, best.fitness()
     print "INITIAL:"
     for solution in initial:
         print solution
