@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import time
+import random
 import signal
 import sys
 from itertools import izip
@@ -49,6 +50,37 @@ def fit(costs, times):
     y = np.array(times)
     _,_,r,_,_ = stats.linregress(x,y)
     return r**2
+
+
+def cross(father, mother):
+    child1 = []
+    child2 = []
+    for i in xrange(len(father)):
+        if random.getrandbits(1):
+            child1.append(father[i])
+            child2.append(mother[i])
+        else:
+            child1.append(mother[i])
+            child2.append(father[i])
+    return child1,child2
+
+def mutate(solution):
+    for i in xrange(len(solution)):
+        if random.randint(0,500) == 100:
+            solution[i] = random.randint(0,100)
+    return solution
+
+def initialize(size):
+    population = []
+    for _ in xrange(size):
+        population.append(random.sample(xrange(100), 5))
+    return population
+
+def ga_search():
+    generations = 1000
+    population  = initialize(20)
+    for generation in xrange(generations):
+        new_pop = []
 
 def main():
     parser = argparse.ArgumentParser(description="Run cost analysis")
