@@ -34,6 +34,9 @@ def main():
     dot = lambda x,y: sum(a*b for a,b in izip(x,y))
     trace_utils.Fragment.model = model
     costs = [dot(counts[program.name], model) for program in programs]
+    if model == [0,0,0,0,0]:
+        print "FOOOOOO"
+        costs = [program.cost() for program in programs]
     times = [average_times[program.name] for program in programs]
     names = [program.name for program in programs]
     produce_gnuplot_file(costs, times,names)

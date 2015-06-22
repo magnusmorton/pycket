@@ -1,4 +1,5 @@
 import argparse
+import copy
 import numpy as np
 import time
 import random
@@ -11,9 +12,9 @@ from scipy import stats
 import trace as trace_utils
 import trace_parser
 
+dot = lambda x,y: sum(a*b for a,b in izip(x,y))
 
-
-
+MAX = 10000
 def half_add(a, b, cap):
     s = a + b
     r = s - cap
@@ -55,40 +56,114 @@ def fit(costs, times):
 def cross(father, mother):
     child1 = []
     child2 = []
-    for i in xrange(len(father)):
-        if random.getrandbits(1):
-            child1.append(father[i])
-            child2.append(mother[i])
-        else:
-            child1.append(mother[i])
-            child2.append(father[i])
-    return child1,child2
+    if random.randint(0,5) == 0:
+        for i in xrange(len(father.model)):
+            if random.getrandbits(1):
+                child1.append(father.model[i])
+                child2.append(mother.model[i])
+            else:
+                child1.append(mother.model[i])
+                child2.append(father.model[i])
+    else:
+        return  father,mother
+    return Solution(child1),Solution(child2)
 
-def mutate(solution):
-    for i in xrange(len(solution)):
-        if random.randint(0,500) == 100:
-            solution[i] = random.randint(0,100)
-    return solution
+def evaluate(population, programs,counts,  times):
+    fitnesses = []
+    for model in population:
+        costs = [dot(counts[program.name], model) for program in programs]
+        fitnesses.append(costs, times)
+    return fitnesses
+        
+        
+
 
 def initialize(size):
     population = []
     for _ in xrange(size):
-        population.append(random.sample(xrange(100), 5))
+        population.append(Solution(random.sample(xrange(MAX), 5)))
     return population
 
-def ga_search():
-    generations = 1000
-    population  = initialize(20)
-    for generation in xrange(generations):
+
+class Solution(object):
+    times = None
+    counts = None
+    programs = None
+    def __init__(self, model):
+        self.model = model
+        self._fitness = None
+        
+
+    def fitness(self):
+        if self._fitness:
+            return self._fitness
+        if not (Solution.times and Solution.counts):
+            raise Exception("No times or counts")
+        costs = [dot(Solution.counts[program.name], self.model) for program in Solution.programs]
+        self._fitness = fit(costs, Solution.times)
+        return self._fitness
+
+    def mutate(self):
+        for i in xrange(len(self.model)):
+            if random.randint(0,100) == 0:
+                self.model[i] = random.randint(0,MAX)
+        self._fitness = None
+        return self
+
+    def __str__(self):
+        return str(self.model)
+
+        
+def selection(population):
+    one = random.choice(population)
+    two = random.choice(population)
+    return fittest(one,two)
+
+def fittest(a,b):
+    if a.fitness() > b.fitness():
+        return a
+    else:
+        return b
+    
+def ga_search(programs,average_times, counts):
+    Solution.programs = programs
+    Solution.counts = counts
+    times = [average_times[program.name] for program in programs]
+    Solution.times = times
+    SIZE = 30
+    generations = 30000
+    population  = initialize(SIZE)
+    initial = copy.deepcopy(population)
+    max_key = lambda a: a.fitness()
+    for i in xrange(generations):
+        if i % 100 == 0:
+            print "generation:", i
+            for solution in population:
+                print solution
         new_pop = []
+        elite = max(population, key=max_key)
+        new_pop.append(elite)
+        while len(new_pop) < SIZE:
+            father = selection(population)
+            mother = selection(population)
+            new_pop.extend(cross(father,mother))
+        population = [solution.mutate() for solution in new_pop]
+    elite = max(population, key=max_key)
+    print "Best:", elite.model, elite.fitness()
+    print "INITIAL:"
+    for solution in initial:
+        print solution
+            
+            
 
 def main():
     parser = argparse.ArgumentParser(description="Run cost analysis")
     parser.add_argument("filenames", metavar="<file>", nargs = '+')
     parser.add_argument("--start", "-s",  default="0,0,0,0,0")
-    parser.add_argument("--end", "-e",  default="1,0,0,0,0")
+    parser.add_argument("--end", "-e",  default="10,10,10,10,10")
     parser.add_argument("--cap", "-c", default=11, type=int)
     parser.add_argument("--step", "-t", default=1, type=int)
+    parser.add_argument("-g",action='store_true')
     
     args = parser.parse_args()
     start = [int(num) for num in args.start.split(",")]
@@ -97,7 +172,8 @@ def main():
     average_times = trace_parser.calculate_average_times()
     programs = trace_parser.parse_files(args.filenames)
     counts = {program.name: program.class_counts() for program in programs}
-    dot = lambda x,y: sum(a*b for a,b in izip(x,y))
+    if args.g:
+        return ga_search(programs, average_times, counts)
     best = None
     def handler(s, frame):
         print "Terminated... Current best:", best

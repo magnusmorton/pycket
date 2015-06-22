@@ -151,7 +151,7 @@ class Fragment(object):
     def cost_with_model(self, i=None):
         if not Fragment.model:
             raise "Model not defined"
-        if Fragment.model == (0,0,0,0,0):
+        if Fragment.model == [0,0,0,0,0]:
             return 1
         # order is [order, array, num, alloc, guards]
         if not i:
