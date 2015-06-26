@@ -8,7 +8,7 @@ import trace as trace_utils
 def produce_gnuplot_file(costs, times, names):
     with open("whole_program.dat", "w") as f:
         for cost, time, name in izip(costs, times, names):
-            f.write(str(cost) + " " + str(time) + " " +  name + "\n")
+            f.write(str(cost) + " " + str(time) + " " +  name + " " + str(time / cost) +  "\n")
 
 
 def main():
