@@ -51,16 +51,45 @@ def k_graph(filenames):
     graph_k_scaling(costs0, costsc,costsw, times, names)
     sys.exit(0)
     
+
+def superimpose(costs1, costs2, times,names):
+    axes = [plt, plt.twiny()]
+    colors = ('g', 'b')
+    for ax, color, costs in izip(axes, colors, [costs1,costs2]):
+        ax.plot( costs, times, marker="o", color=color, linestyle='none')
+    plt.show()
+    
+def super_graph(filenames):
+    cm0 = [0,0,0,0,0]
+    cmc = [1,1,1,1,1]
+    cmw = [1.0, 0, 5.195, 35.56,0]
+    average_times = trace_parser.calculate_average_times()
+    programs = trace_parser.parse_files(filenames)
+    counts = {program.name: program.class_counts() for program in programs}
+    
+    trace_utils.Fragment.model = cm0
+    costsc = [dot(counts[program.name], cmc) for program in programs]
+    costsw = [dot(counts[program.name], cmw) for program in programs]
+    
+    costs0 = [program.cost() for program in programs]
+    times = [average_times[program.name] for program in programs]
+    names = [program.name for program in programs]
+    superimpose(costsc,costsw, times, names)
+    sys.exit(0)
+    
 def main():
     parser = argparse.ArgumentParser(description="Run cost analysis")
     parser.add_argument("filenames", metavar="<file>", nargs = '+')
     parser.add_argument("--model", "-m",  default="cm1")
     parser.add_argument( "-k",  action='store_true')
+    parser.add_argument( "-s",  action='store_true')
     
 
     args = parser.parse_args()
     if args.k:
         k_graph(args.filenames)
+    if args.s:
+        super_graph(args.filenames)
     model = []
     if args.model == "cm0":
         model = [0,0,0,0,0]
