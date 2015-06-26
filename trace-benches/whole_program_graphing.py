@@ -1,7 +1,7 @@
 import argparse
 import sys
 from itertools import izip
-
+from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import numpy as np
 import trace_parser
@@ -55,10 +55,27 @@ def k_graph(filenames):
 def superimpose(costs1, costs2, times,names):
     axes = [plt, plt.twiny()]
     colors = ('g', 'b')
-    for ax, color, costs in izip(axes, colors, [costs1,costs2]):
-        ax.plot( costs, times, marker="o", color=color, linestyle='none')
+    offsets = (20,-20)
+    for ax, color, costs, offset in izip(axes, colors, [costs1,costs2], offsets):
+
+        #parameter, covariance_matrix = curve_fit(line_func, times, costs)
+        m, b = np.polyfit(costs, times, 1)
+        fit_fn = np.poly1d((m,b))
+        ax.plot( costs[:10], times[:10],  'o' + color, costs, fit_fn(costs), '-' + color)
+        for name, x,y in izip(names[:10], costs[:10], times[:10]):
+            plt.annotate(
+                name,
+                xy =(x,y),
+                xytext =(20,offset),
+                textcoords = 'offset points', ha = 'left', va = 'bottom',
+                arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
+        #ax.plot(x, line_func(x, *parameter), color=color)
     plt.show()
-    
+
+
+def line_func(x, a, b):
+    return a*x + b
+
 def super_graph(filenames):
     cm0 = [0,0,0,0,0]
     cmc = [1,1,1,1,1]
