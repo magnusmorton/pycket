@@ -155,6 +155,10 @@ def ga_search(programs,average_times, counts):
             new_pop.extend(cross(father,mother))
         population = [solution.mutate() for solution in new_pop]
     elite = max(population, key=max_key)
+    if not best:
+        best = elite
+    elif elite.fitness() > best.fitness():
+        best = elite
     print "Elite:", elite.model, elite.fitness()
     print "Best:", best.model, best.fitness()
     print "INITIAL:"
