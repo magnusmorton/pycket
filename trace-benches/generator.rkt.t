@@ -11,8 +11,8 @@
 (define vec1 (make-vector (+ 3 SIZE) 3))
 (define vec2 (in-range 5 (+ 5 SIZE)))
 
+(define s "abcdef")
 
-(define s (string #\A #\p #\p #\l #\e #\s))
 (define b #f)
 
 (define (dot u v) (for/sum ([x u] [y v]) (* x y)))
@@ -24,16 +24,9 @@
      #`(time (for ([i (in-range REPS)])
                (begin
                  #,@(for/list ([x (in-range  Z)])
-                     ;;  (case (modulo x 10)
-;; ;                        [(0 1 2 9)#`(vector-set! vec1 i (* 123.34 #,(random 10)) )]
-;; ;                        [(6 7 8) #`(set! b (< 50 #,(random 100)))]
-;;                         [(1 2 3 4 5) #'(set! s (string-append "apple" "banana"))]
-;;                         [else #'(set! s "abcdef")]
-                      ;#`(vector-set! vec1 i (* 123.34 #,(random 10)) )
-                      #`(string-set! s #,(random 6) #,(integer->char (random 255)) )
-                        ))))
-     ]
-  ))
+                      (case (modulo x 10)
+                        [(0 1 2 9)#`(vector-set! vec1 i (* 123.34 #,(random 10)) )]
+                        [else #`(set! b (< 50 #,(random 100)))])))))]))
 
 
 (define-syntax (nested stx)
@@ -42,7 +35,7 @@
      #`(for ([j (in-range 2000)])
          (time (for ([i (in-range REPS)])
                  (begin
-                   #,@(for/list ([x (in-range  Z)])
+                   #,@(for/list ([x (in-range  10)])
                         #`(vector-set! vec1 i (* 123.34 #,(random 10)) ))))))
      ]
   ))
