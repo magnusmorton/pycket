@@ -170,7 +170,7 @@ def ga_search(programs,average_times, counts):
 def monte_carlo_validation(programs, average_times, counts):
 
     for _ in xrange(5):
-        indices = random.sample(xrange(len(programs)), 35)
+        indices = random.sample(xrange(len(programs)), 30)
         programs_subset = [programs[i] for i in indices]
        
 

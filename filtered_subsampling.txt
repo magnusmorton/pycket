@@ -1,0 +1,84 @@
+nestedloop pnpoly fannkuch-redux dderiv perm9 ackermann cpstak array1 diviter spectralnorm-generic binarytrees recursive boyer sum sboyer sieve sumloop binarytrees-generic ctak ary lists spectralnorm nsieve sumfp primes takl fannkuch-redux-generic nboyer deriv nsievebits destruc fibc fibo random puzzle 
+Elite: [211, 34, 590, 9937, 14] 0.552380337925
+Best: [211, 34, 590, 9937, 14] 0.552380337925
+
+takl sumloop boyer fannkuch-redux ackermann perm9 recursive binarytrees-generic puzzle nsieve heapsort ary nestedloop ack lattice spectralnorm pnpoly random divrec nsievebits dderiv primes fannkuch-redux-generic array1 lists sumfp deriv destruc sieve nboyer fibfp ctak sum fibc trav2 
+Elite: [5073, 10, 4117, 9745, 0] 0.423474191734
+Best: [5073, 10, 4117, 9745, 0] 0.423474191734
+
+fibfp sboyer binarytrees-generic takl nestedloop fannkuch-redux-generic sumloop destruc ctak diviter sieve nsievebits ary spectralnorm puzzle random fibc dderiv perm9 ack fib nsieve recursive binarytrees deriv fannkuch-redux lists boyer tak fibo divrec array1 nboyer lattice cpstak 
+Elite: [612, 2211, 1259, 9999, 7] 0.432796459879
+Best: [612, 2211, 1259, 9999, 7] 0.432796459879
+
+destruc recursive divrec nestedloop sumfp perm9 fannkuch-redux-generic ackermann ctak ary fibfp binarytrees-generic nboyer lists puzzle boyer sboyer random diviter binarytrees fibc trav2 nsieve primes ack fannkuch-redux sum deriv cpstak lattice fib tak sumloop fibo takl 
+Elite: [385, 2196, 1671, 9787, 21] 0.412750838827
+Best: [385, 2196, 1671, 9787, 21] 0.412750838827
+
+lattice nsieve fib sumfp fibo fibfp sboyer array1 perm9 binarytrees recursive sum lists ctak nestedloop divrec deriv takl boyer ary binarytrees-generic fibc fannkuch-redux random puzzle trav2 sumloop primes pnpoly sieve nboyer spectralnorm-generic fannkuch-redux-generic tak ackermann 
+Elite: [6092, 23, 9015, 8351, 822] 0.419359976072
+Best: [6092, 23, 9015, 8351, 822] 0.419359976072
+
+nsieve diviter tak fibo fannkuch-redux-generic primes nboyer binarytrees cpstak takl divrec fib recursive ary spectralnorm fibc nestedloop lists puzzle trav2 array1 sboyer lattice deriv pnpoly fannkuch-redux boyer spectralnorm-generic ackermann sumloop dderiv ctak random sieve sum 
+Elite: [219, 4, 963, 9569, 0] 0.414785429829
+Best: [219, 4, 963, 9569, 0] 0.414785429829
+
+fibfp sboyer binarytrees-generic takl nestedloop fannkuch-redux-generic sumloop destruc ctak diviter sieve nsievebits ary spectralnorm puzzle random fibc dderiv perm9 ack fib nsieve recursive binarytrees deriv fannkuch-redux lists boyer tak fibo divrec array1 nboyer lattice cpstak 
+Elite: [612, 2211, 1259, 9999, 7] 0.432796459879
+Best: [612, 2211, 1259, 9999, 7] 0.432796459879
+
+destruc recursive divrec nestedloop sumfp perm9 fannkuch-redux-generic ackermann ctak ary fibfp binarytrees-generic nboyer lists puzzle boyer sboyer random diviter binarytrees fibc trav2 nsieve primes ack fannkuch-redux sum deriv cpstak lattice fib tak sumloop fibo takl 
+Elite: [385, 2196, 1671, 9787, 21] 0.412750838827
+Best: [385, 2196, 1671, 9787, 21] 0.412750838827
+
+binarytrees nboyer sumfp lists lattice sum takl nsieve deriv nestedloop ack primes fibc binarytrees-generic perm9 dderiv boyer tak ctak destruc fannkuch-redux-generic recursive cpstak fibo spectralnorm spectralnorm-generic heapsort divrec fib fibfp diviter fannkuch-redux sboyer array1 sumloop 
+Elite: [107, 8475, 1108, 4686, 57] 0.407281016459
+Best: [107, 8475, 1108, 4686, 57] 0.407281016459
+
+
+fibo puzzle trav2 sum lattice ary fibc ackermann lists tak nboyer fannkuch-redux recursive binarytrees deriv spectralnorm sieve random binarytrees-generic ctak fannkuch-redux-generic primes sumloop divrec spectralnorm-generic sumfp fibfp nsieve dderiv fib destruc array1 nestedloop ack pnpoly 
+Elite: [2126, 1, 3962, 9621, 15] 0.437079799595
+Best: [2126, 1, 3962, 9621, 15] 0.437079799595
+
+binarytrees cpstak destruc trav2 spectralnorm pnpoly sumloop binarytrees-generic sum ack ary fibc sboyer nestedloop fib sieve deriv lattice nsieve array1 dderiv fannkuch-redux takl ctak puzzle boyer sumfp fibo spectralnorm-generic nboyer primes fannkuch-redux-generic diviter ackermann nsievebits 
+Elite: [426, 9, 1024, 9557, 3] 0.428223458771
+Best: [426, 9, 1024, 9557, 3] 0.428223458771
+
+sumfp perm9 cpstak nsievebits lattice divrec spectralnorm-generic ary ack fibc sboyer fannkuch-redux fannkuch-redux-generic random trav2 binarytrees-generic boyer deriv pnpoly fibfp dderiv diviter nestedloop sum takl nboyer nsieve sumloop fib destruc sieve spectralnorm binarytrees fibo primes 
+Elite: [637, 28, 1678, 9980, 20] 0.401087054409
+Best: [637, 28, 1678, 9980, 20] 0.401087054409
+
+fibc sieve sumloop ctak nsieve ackermann sum nestedloop divrec trav2 puzzle deriv spectralnorm fannkuch-redux-generic nsievebits boyer sboyer binarytrees takl ack diviter sumfp pnpoly fibo fib tak fibfp fannkuch-redux recursive nboyer destruc lattice lists random primes 
+Elite: [1199, 3, 1969, 9745, 2] 0.408096122755
+Best: [1199, 3, 1969, 9745, 2] 0.408096122755
+
+trav2 sumfp deriv lattice diviter tak fibc dderiv spectralnorm spectralnorm-generic binarytrees fib nsievebits sum primes fannkuch-redux-generic nboyer divrec boyer puzzle sieve random nsieve perm9 ary binarytrees-generic nestedloop ctak sboyer lists fibfp fibo sumloop takl cpstak 
+Elite: [133, 2130, 1444, 9963, 50] 0.411520354605
+Best: [133, 2130, 1444, 9963, 50] 0.411520354605
+
+======================================================================
+30
+=====================================================================
+cpstak fibc sieve binarytrees nestedloop fibo sum ack fib destruc trav2 fannkuch-redux spectralnorm fibfp fannkuch-redux-generic sumfp recursive dderiv boyer random ackermann array1 sboyer divrec takl binarytrees-generic primes tak perm9 sumloop 
+Elite: [171, 8501, 1371, 1665, 37] 0.519391813441
+Best: [171, 8501, 1371, 1665, 37] 0.519391813441
+spectralnorm binarytrees-generic fibc sumfp array1 fib boyer fannkuch-redux-generic fibfp ary takl sum sboyer divrec tak lists primes deriv cpstak random sieve lattice dderiv nsieve nsievebits puzzle destruc ctak spectralnorm-generic trav2 
+Elite: [432, 4385, 2605, 9700, 3] 0.450416002929
+Best: [432, 4385, 2605, 9700, 3] 0.450416002929
+
+
+=======================================================================
+analysis
+======================================================================
+>>> set_all.difference(best)
+set(['fibfp', 'heapsort', 'ack', 'divrec', 'fib', 'lattice', 'trav2', 'tak'])
+>>> set_all.difference(other)
+set(['ackermann', 'pnpoly', 'sum', 'sumfp', 'trav2', 'primes', 'heapsort', 'spectralnorm-generic'])
+>>> other.difference(best)
+set(['fibfp', 'ack', 'divrec', 'fib', 'lattice', 'tak'])
+>>> best.difference(other)
+set(['ackermann', 'pnpoly', 'sum', 'sumfp', 'primes', 'spectralnorm-generic'])
+>>> set_all.difference(other).intersection
+<built-in method intersection of set object at 0x7fac767fe308>
+>>> set_all.difference(other).intersection(set_all.difference(best))
+set(['heapsort', 'trav2'])
+>>> 
