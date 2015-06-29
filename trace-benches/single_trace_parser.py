@@ -73,7 +73,7 @@ def mem_cost(frag, i=None):
         j+=1
     return cost
 
-def class_counts(self, i=None):
+def weighted_costs(self, i=None):
     if not i:
         i = len(self.ops)
     j = 0
@@ -81,15 +81,15 @@ def class_counts(self, i=None):
     while j < i:
         op = self.ops[j].split()[0]
         if op in instructions.object_ops:
-            counts[0] += 1
+            counts[0] += 267
         elif op in instructions.array_ops:
-            counts[1] += 1
+            counts[1] += 0
         elif op in instructions.num_ops:
-            counts[2] += 1
+            counts[2] += 1387
         elif op in instructions.alloc_ops:
-            counts[3] += 1
+            counts[3] += 9494
         elif op == "GUARD:":
-            counts[4] += 1
+            counts[4] += 0
         j += 1
     return counts
 

@@ -11,11 +11,17 @@ import trace as trace_utils
 dot = lambda x,y: sum(a*b for a,b in izip(x,y))
 
 def produce_gnuplot_file(costs, times, names):
+    k_stats(costs, times, names)
     with open("whole_program.dat", "w") as f:
         for cost, time, name in izip(costs, times, names):
             f.write(str(cost) + " " + str(time) + " " +  name + " " + str(time / cost) +  "\n")
 
 
+
+def k_stats(costs, times, names):
+    ks = np.array([time/cost for cost, time in izip(costs, times)])
+    print "Mean: " + np.mean(ks) + " STD DEV: " + np.std(ks)
+    
 def graph_k_scaling(costs0, costsc, costsw, times, names):
     width = 0.2333
     ind = np.arange(len(names))
