@@ -20,7 +20,7 @@ def produce_gnuplot_file(costs, times, names):
 
 def k_stats(costs, times, names):
     ks = np.array([time/cost for cost, time in izip(costs, times)])
-    print "Mean: " + np.mean(ks) + " STD DEV: " + np.std(ks)
+    print "Mean: " + str(np.mean(ks)) + " STD DEV: " + str(np.std(ks))
     
 def graph_k_scaling(costs0, costsc, costsw, times, names):
     width = 0.2333
@@ -56,7 +56,12 @@ def k_graph(filenames):
     names = [program.name for program in programs]
     graph_k_scaling(costs0, costsc,costsw, times, names)
     sys.exit(0)
-    
+
+def graph(costs, times, names, model):
+    m, b = np.polyfit(costs, times, 1)
+    fit_fn = np.poly1d((m,b))
+    plt.plot( costs[:10], times[:10],  'xg' , costs, fit_fn(costs), '-b')
+    print fit_fn
 
 def superimpose(costs1, costs2, times,names):
     axes = [plt, plt.twiny()]
@@ -68,6 +73,7 @@ def superimpose(costs1, costs2, times,names):
         m, b = np.polyfit(costs, times, 1)
         fit_fn = np.poly1d((m,b))
         ax.plot( costs[:10], times[:10],  'o' + color, costs, fit_fn(costs), '-' + color)
+        print fit_fn
         for name, x,y in izip(names[:10], costs[:10], times[:10]):
             plt.annotate(
                 name,
@@ -85,7 +91,7 @@ def line_func(x, a, b):
 def super_graph(filenames):
     cm0 = [0,0,0,0,0]
     cmc = [1,1,1,1,1]
-    cmw = [1.0, 0, 5.195, 35.56,0]
+    cmw = [267, 0, 1387, 9494,0]
     average_times = trace_parser.calculate_average_times()
     programs = trace_parser.parse_files(filenames)
     counts = {program.name: program.class_counts() for program in programs}

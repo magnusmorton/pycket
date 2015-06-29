@@ -65,8 +65,8 @@ def cross(father, mother):
                 child1.append(mother.model[i])
                 child2.append(father.model[i])
     else:
-        return  father,mother
-    return Solution(child1),Solution(child2)
+        return  father
+    return Solution(child1)
 
 def evaluate(population, programs,counts,  times):
     fitnesses = []
@@ -138,10 +138,10 @@ def ga_search(programs,average_times, counts):
     best_rsq = 0
     best = None
     for i in xrange(generations):
-        if i % 100 == 0:
-            print "generation:", i
-            for solution in population:
-                print solution
+        # if i % 100 == 0:
+        #     print "generation:", i
+        #     for solution in population:
+        #         print solution
         new_pop = []
         elite = max(population, key=max_key)
         if not best:
@@ -152,7 +152,7 @@ def ga_search(programs,average_times, counts):
         while len(new_pop) < SIZE:
             father = selection(population)
             mother = selection(population)
-            new_pop.extend(cross(father,mother))
+            new_pop.append(cross(father,mother))
         population = [solution.mutate() for solution in new_pop]
     elite = max(population, key=max_key)
     if not best:
@@ -161,11 +161,24 @@ def ga_search(programs,average_times, counts):
         best = elite
     print "Elite:", elite.model, elite.fitness()
     print "Best:", best.model, best.fitness()
-    print "INITIAL:"
-    for solution in initial:
-        print solution
+   # print "INITIAL:"
+    # for solution in initial:
+    #     print solution
             
-            
+
+
+def monte_carlo_validation(programs, average_times, counts):
+
+    for _ in xrange(5):
+        indices = random.sample(xrange(len(programs)), 35)
+        programs_subset = [programs[i] for i in indices]
+       
+
+        for program in programs_subset:
+            print program.name,
+        print ""
+        ga_search(programs_subset, average_times, counts)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run cost analysis")
@@ -175,6 +188,7 @@ def main():
     parser.add_argument("--cap", "-c", default=11, type=int)
     parser.add_argument("--step", "-t", default=1, type=int)
     parser.add_argument("-g",action='store_true')
+    parser.add_argument("-r", action='store_true')
     
     args = parser.parse_args()
     start = [int(num) for num in args.start.split(",")]
@@ -185,6 +199,8 @@ def main():
     counts = {program.name: program.class_counts() for program in programs}
     if args.g:
         return ga_search(programs, average_times, counts)
+    elif args.r:
+        return monte_carlo_validation(programs, average_times, counts)
     best = None
     def handler(s, frame):
         print "Terminated... Current best:", best

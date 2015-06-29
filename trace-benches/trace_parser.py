@@ -30,7 +30,7 @@ def calculate_average_times():
 def parse_files(filenames):
     all_traces = []
     for arg in filenames:
-        print arg
+        #print arg
         counts = {}
         run_times = [] 
         traces = []

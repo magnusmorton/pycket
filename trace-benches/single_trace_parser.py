@@ -3,7 +3,7 @@ import sys
 import copy
 import operator
 import numpy as np
-import instructions as ins
+import instructions
 import trace
 from scipy.optimize import nnls
 from scipy.linalg import solve
@@ -137,7 +137,7 @@ class Bridge(Trace):
         return super(Bridge, self).get_fragments(guards, self.guard)
 
 class Fragment(object):
-    cost_fn = simple_cost
+    cost_fn = null_cost
     def __init__(self, ops, label, guards):
         self.ops = ops
         self.label = label
