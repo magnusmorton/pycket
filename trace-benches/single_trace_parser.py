@@ -3,6 +3,8 @@ import sys
 import copy
 import operator
 import numpy as np
+import instructions as ins
+import trace
 from scipy.optimize import nnls
 from scipy.linalg import solve
 from sets import Set
@@ -51,6 +53,9 @@ looptoken_re = re.compile("<Loop(\d*)>")
 
 
 
+def null_cost(frag, i=None):
+    return 1
+
 def simple_cost(frag, i=None):
     return len(filter( lambda x: x.split()[0] != "DEBUG_MERGE_POINT_OP",frag.ops[0:None]))
 
@@ -67,9 +72,26 @@ def mem_cost(frag, i=None):
             cost += 1
         j+=1
     return cost
-            
-        
-        
+
+def class_counts(self, i=None):
+    if not i:
+        i = len(self.ops)
+    j = 0
+    counts = [0]*5
+    while j < i:
+        op = self.ops[j].split()[0]
+        if op in instructions.object_ops:
+            counts[0] += 1
+        elif op in instructions.array_ops:
+            counts[1] += 1
+        elif op in instructions.num_ops:
+            counts[2] += 1
+        elif op in instructions.alloc_ops:
+            counts[3] += 1
+        elif op == "GUARD:":
+            counts[4] += 1
+        j += 1
+    return counts
 
 class Trace(object):
     def __init__(self, ops, token=None):
