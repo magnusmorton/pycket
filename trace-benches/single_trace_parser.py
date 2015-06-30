@@ -77,21 +77,21 @@ def weighted_costs(self, i=None):
     if not i:
         i = len(self.ops)
     j = 0
-    counts = [0]*5
+    cost = 0
     while j < i:
         op = self.ops[j].split()[0]
         if op in instructions.object_ops:
-            counts[0] += 267
+            cost += 211
         elif op in instructions.array_ops:
-            counts[1] += 0
+            cost += 34
         elif op in instructions.num_ops:
-            counts[2] += 1387
+            cost += 590
         elif op in instructions.alloc_ops:
-            counts[3] += 9494
+            cost += 9937
         elif op == "GUARD:":
-            counts[4] += 0
+            cost += 14
         j += 1
-    return counts
+    return cost
 
 class Trace(object):
     def __init__(self, ops, token=None):
@@ -137,7 +137,7 @@ class Bridge(Trace):
         return super(Bridge, self).get_fragments(guards, self.guard)
 
 class Fragment(object):
-    cost_fn = null_cost
+    cost_fn = weighted_costs
     def __init__(self, ops, label, guards):
         self.ops = ops
         self.label = label
