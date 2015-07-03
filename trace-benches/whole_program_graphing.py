@@ -79,16 +79,25 @@ def rsquared(coeffs, x,y ):
     return results
 
 def graph(costs, times, names, model):
-    coeffs = np.polyfit(costs, times, 1)
+    outliers = ["fibfp", "heapsort", "ack", "divrec", "fib", "lattice", "trav2", "tak"]
+    filtered_names = [name for name in names if name not in outliers]
+    filtered_costs = [ cost for cost,name in izip(costs, names) if name in filtered_names]
+    filtered_times = [time for time, name in izip(times, names) if name in filtered_names]
+    outlier_costs = [cost for cost, name in izip(costs, names) if name in outliers]
+    outlier_times = [time for time, name in izip(times, names) if name in outliers]
+    coeffs = np.polyfit(filtered_costs, filtered_times, 1)
     fit_fn = np.poly1d(coeffs)
     k_stats(costs, times, names)
     print fit_fn
     print "rsquared"
-    print rsquared(coeffs, costs, times)
+    print rsquared(coeffs, filtered_costs, filtered_times)
     plt.ylabel("Execution time ($\mu s$)")
     plt.xlabel("Cost")
     plt.title("Whole program plot for " + model.upper())
-    plt.plot( costs, times,  'xg' , costs, fit_fn(costs), '-b')
+    plt.plot( filtered_costs, filtered_times,  'xg', label="Points included in fit" )
+    plt.plot(filtered_costs, fit_fn(filtered_costs), '-b')
+    plt.plot( outlier_costs, outlier_times, 'or', label="Points excluded by subsampling")
+    plt.legend()
     plt.show()
     
 
