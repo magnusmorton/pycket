@@ -26,7 +26,7 @@
                  #,@(for/list ([x (in-range  Z)])
                       (case (modulo x 10)
                         [(0 1 2 9)#`(vector-set! vec1 i (* 123.34 #,(random 10)) )]
-                        [(3 4) #`(set l (append l #,(random 10)))]
+                        [(3 4) #`(set! l (list #,(random 10)))]
                         [else #`(set! b (< 50 #,(random 100)))])))))]))
 
 
