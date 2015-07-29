@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import trace_parser
 import trace as trace_utils
-
+import string
 import pdb
 
 dot = lambda x,y: sum(a*b for a,b in izip(x,y))
@@ -25,21 +25,29 @@ def k_stats(costs, times, names):
     
 def graph_residual(costs0, costsc, costsw, times, names):
     width = 0.2333
-    ind = np.arange(len(names[:10]))
+    ind = np.arange(len(names))
     fn0 = np.poly1d(np.polyfit(costs0,times, 1))
     fnc = np.poly1d(np.polyfit(costsc,times, 1))
     fnw = np.poly1d(np.polyfit(costsw,times, 1))
     res0 = np.subtract(times, fn0(costs0))
     resc = np.subtract(times, fnc(costsc))
     resw = np.subtract(times, fnw(costsw))
-    rects0 = plt.bar(ind, res0[:10], width, color='r', hatch='/')
-    rectsc = plt.bar(ind+width, resc[:10], width, color='g', hatch='-')
-    rectsw = plt.bar(ind+ 2*width, resw[:10], width, color='b', hatch='\\')
+    rects0 = plt.bar(ind, res0, width, color='r', hatch='/')
+    rectsc = plt.bar(ind+width, resc, width, color='g', hatch='-')
+    rectsw = plt.bar(ind+ 2*width, resw, width, color='b', hatch='\\')
     plt.ylabel("Residual")
     plt.xlabel("Benchmark")
     plt.title("Residuals for each benchmark")
-    plt.xticks(ind + 1.5*width, names[:10], rotation=30, ha = 'right')
-    plt.legend((rects0[0], rectsc[0], rectsw[0]), ("CM0", "CMC", "CMW"), title="Cost Model")
+    tick_names = [string.replace(name, "generic", "gen") for name in names]
+    plt.xticks(ind + 1.5*width, tick_names, rotation=20, ha = 'right')
+    outliers = ["fibfp", "heapsort", "ack", "divrec", "fib", "lattice", "trav2", "tak"]
+    plt.legend((rects0[0], rectsc[0], rectsw[0]), ("CM0", "CMC", "CMW"), title="Cost Model")   
+    for rect0,rectc,rectw, name in izip(rects0,rectsc,rectsw, names):
+        if name in outliers:
+            rect0.set(hatch='*', alpha=0.50)
+            rectc.set(hatch='*', alpha=0.50)
+            rectw.set(hatch='*', alpha=0.50)
+
     plt.show()
 
 
