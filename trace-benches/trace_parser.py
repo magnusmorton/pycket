@@ -10,6 +10,7 @@ bridge_re = re.compile(r"BRIDGE -.*HASH: (?P<hash>.*) GUARD: *(?P<guard>\d*) COS
 counts_re = re.compile(r"loop.*([elb]) (?P<fragment>\d*) (?P<count>\d*)") 
 times_re = re.compile(r"\s*(\d*\.\d*) seconds time elapsed")
 looptoken_re = re.compile(r"<Loop(\d*)>")
+assembly_re = re.compile(r"ASSEMBLY (\d*) from ops: \d*")
 
 
 def calculate_average_times():
@@ -27,7 +28,8 @@ def calculate_average_times():
     return {name: sum(times)/float(len(times)) for name, times in times_dict.iteritems()}
 
 
-def parse_files(filenames):
+def parse_files(filenames, fragment=False):
+    all_fragments = []
     all_traces = []
     for arg in filenames:
         #print arg
@@ -47,6 +49,7 @@ def parse_files(filenames):
                     entry_points = {}
                 m_times = times_re.match(line)
                 m_counts = counts_re.match(line.rstrip())
+                m_assembly  = assembly_re.match(line.rstrip())
                 if line[0:4] == 'LOOP':
                     tokens = line.split()
                     looptoken = int(looptoken_re.match(tokens[1]).group(1))
@@ -65,11 +68,17 @@ def parse_files(filenames):
                         counts[int(m_counts.group("fragment"))] = count
                         if m_counts.group(1) == 'b':
                             guards.append(int(m_counts.group("fragment")))
+                if m_assembly:
+                    # set last trace's assembly count
+                    traces[-1].assembly_count = int(m_assembly.group(1))
                 line = f.readline()
+        all_traces.extend(traces)
 
-
+        if fragment:
+            return all_traces
+                
         # build fragments for each trace, flatten the list and turn it into a dic
         frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
         name = os.path.basename(arg)
-        all_traces.append(trace_utils.Program(name, frags, counts, entry_points))
-    return all_traces
+        all_fragments.append(trace_utils.Program(name, frags, counts, entry_points))
+    return all_fragments
