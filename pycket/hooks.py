@@ -14,36 +14,15 @@ class PycketJitInterface(JitHookInterface):
         super(PycketJitInterface, self).__init__()
         self.analysis = analysis
         
-
     def after_compile(self, debug_info):
         trace_list.append(Trace(debug_info.operations))
         print "LOOP", debug_info.looptoken.repr_of_descr()
         _output(debug_info)
-        
-        
-
+    
     def after_compile_bridge(self, debug_info):
         trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
         print "BRIDGE: ", compute_unique_id(debug_info.fail_descr)
         _output(debug_info)
-
-    def _output(debug_info):
-        for op in debug_info.operations:
-            if op.getopname() == "label":
-                print "LABEL: ", op.getdescr().repr_of_descr()
-            elif op.getopname()[0:5] == "guard":
-                print "GUARD: ", compute_unique_id(op.getdescr())
-            else:
-                print op
-        print "END TRACE"
-        print "ASSEMBLY", debug_info.asminfo.asmlen,
-        print "from ops:", len(debug_info.operations)
-
-
-#        print "BRIDGE -  HASH: ", loop_hash(debug_info.operations), " GUARD: ", compute_unique_id(debug_info.fail_descr), " COST: ", str(self.analysis.cost(debug_info.operations))
-
-
-
 
 def loop_hash(operations):
     hash_num = 0
@@ -65,3 +44,16 @@ def analyse():
         if op.getopname() == "jump":
             if current_label is not None:
                 print "LOOP - HASH: ", loop_hash(debug_info.operations[start_pos:i]), " TT: ", current_label.getdescr().repr_of_descr(), " COST: ", str(self.analysis.cost(debug_info.operations[start_pos:i]))
+
+
+def _output(debug_info):
+    for op in debug_info.operations:
+        if op.getopname() == "label":
+            print "LABEL: ", op.getdescr().repr_of_descr()
+        elif op.getopname()[0:5] == "guard":
+            print "GUARD: ", compute_unique_id(op.getdescr())
+        else:
+            print op
+    print "END TRACE"
+    print "ASSEMBLY", debug_info.asminfo.asmlen,
+    print "from ops:", len(debug_info.operations)
