@@ -18,7 +18,16 @@ class PycketJitInterface(JitHookInterface):
     def after_compile(self, debug_info):
         trace_list.append(Trace(debug_info.operations))
         print "LOOP", debug_info.looptoken.repr_of_descr()
+        _output(debug_info)
+        
+        
 
+    def after_compile_bridge(self, debug_info):
+        trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
+        print "BRIDGE: ", compute_unique_id(debug_info.fail_descr)
+        _output(debug_info)
+
+    def _output(debug_info):
         for op in debug_info.operations:
             if op.getopname() == "label":
                 print "LABEL: ", op.getdescr().repr_of_descr()
@@ -29,19 +38,6 @@ class PycketJitInterface(JitHookInterface):
         print "END TRACE"
         print "ASSEMBLY", debug_info.asminfo.asmlen,
         print "from ops:", len(debug_info.operations)
-        
-
-    def after_compile_bridge(self, debug_info):
-        trace_list.append(Bridge(debug_info.operations, compute_unique_id(debug_info.fail_descr)))
-        print "BRIDGE: ", compute_unique_id(debug_info.fail_descr)
-        for op in debug_info.operations:
-            if op.getopname() == "label":
-                print "LABEL: ", op.getdescr().repr_of_descr()
-            elif op.getopname()[0:5] == "guard":
-                print "GUARD: ", compute_unique_id(op.getdescr())
-            else:
-                print op
-        print "END TRACE"
 
 
 #        print "BRIDGE -  HASH: ", loop_hash(debug_info.operations), " GUARD: ", compute_unique_id(debug_info.fail_descr), " COST: ", str(self.analysis.cost(debug_info.operations))
