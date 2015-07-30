@@ -72,13 +72,14 @@ def parse_files(filenames, fragment=False):
                     # set last trace's assembly count
                     traces[-1].assembly_count = int(m_assembly.group(1))
                 line = f.readline()
-        all_traces.extend(traces)
+        all_traces.extend(traces)        
 
-        if fragment:
-            return all_traces
-                
         # build fragments for each trace, flatten the list and turn it into a dic
+        assert len(traces) > 0
         frags = {frag.label: frag for frag in reduce(operator.add, [trace.get_fragments(guards) for trace in traces])}
         name = os.path.basename(arg)
         all_fragments.append(trace_utils.Program(name, frags, counts, entry_points))
+
+    if fragment:
+        return all_traces
     return all_fragments
