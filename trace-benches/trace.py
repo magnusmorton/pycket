@@ -72,10 +72,33 @@ def deriv_cost(frag, i=None):
 
 def null_cost(frag, i=None):
     return 1
-        
+
+class Countable(object):
+     def class_counts(self, i=None):
+        if not i:
+            i = len(self.ops)
+        j = 0
+        counts = [0]*5
+        while j < i:
+            op = self.ops[j].split()[0]
+            if op in instructions.object_ops:
+                counts[0] += 1
+            elif op in instructions.array_ops:
+                counts[1] += 1
+            elif op in instructions.num_ops:
+                counts[2] += 1
+            elif op in instructions.alloc_ops:
+                counts[3] += 1
+            elif op == "GUARD:":
+                counts[4] += 1
+            j += 1
+        return counts
+
+
+
         
 
-class Trace(object):
+class Trace(Countable):
     def __init__(self, ops, token=None):
         self.ops = ops
         self.token = token
@@ -117,33 +140,12 @@ class Bridge(Trace):
         # just use the bridge's guard id as a label
         return super(Bridge, self).get_fragments(guards, self.guard)
 
-class Fragment(object):
+class Fragment(Countable):
     model = None
     def __init__(self, ops, label, guards):
         self.ops = ops
         self.label = label
         self.guards = guards
-
-    def class_counts(self, i=None):
-        if not i:
-            i = len(self.ops)
-        j = 0
-        counts = [0]*5
-        while j < i:
-            op = self.ops[j].split()[0]
-            if op in instructions.object_ops:
-                counts[0] += 1
-            elif op in instructions.array_ops:
-                counts[1] += 1
-            elif op in instructions.num_ops:
-                counts[2] += 1
-            elif op in instructions.alloc_ops:
-                counts[3] += 1
-            elif op == "GUARD:":
-                counts[4] += 1
-            j += 1
-        return counts
-
 
     def count2guard(self, guard):
         return self.class_counts(self.guards[guard])
@@ -191,6 +193,7 @@ class Fragment(object):
             hash_num *= 251
             hash_num += hash(op.split()[0])
         return hash_num
+
 
 class Program(object):
     def __init__(self, name, fragments, counts, entry_points):
