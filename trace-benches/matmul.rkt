@@ -6,25 +6,6 @@
   (for/list ([r m1])
     (m-mult-inner r m2)))
 
-(define (m-mult-inner r m2)
-  (for/list ([c (apply map list m2)])
-    (apply + (map * r c))))
-
-(define (slice l offset n)
-  (take (drop l offset) n))
-
-(define (m-mult-chunked m1 m2 n)
-  (let* ([len (length m1)]
-         [x (m-mult (slice m1 0 (/ len n)) m2)]
-         [y (m-mult (slice m1 2 (/ len n)) m2)])
-    (append x y)))
-(m-mult test1 test2)
-
-(m-mult-chunked test1 test2 2)
-;; -> '((19 22) (43 50))
-
-
-
 (define (make-mat rows cols)
   (for/list ([i cols])
     (random-list rows)))
@@ -33,4 +14,23 @@
   (for/list ([i size])
     (random 10)))
 
-(length (make-mat 10 10))
+(define (m-mult-inner r m2)
+  (for/list ([c (apply map list m2)])
+    (apply + (map * r c))))
+
+(define (slice l offset n)
+  (take (drop l offset) n))
+
+(define (m-mult-chunked m1 m2 n)
+  (let ([chunk (/ (length m1) n)])
+    (apply append
+            (for/list ([worker n])
+              (m-mult (slice m1 (* worker chunk) chunk) m2)))))
+
+(m-mult test1 test2)
+
+(m-mult-chunked (make-mat 1000 100) (make-mat 100 1000) 2)
+;; -> '((19 22) (43 50))
+
+
+
