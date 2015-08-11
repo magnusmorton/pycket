@@ -14,3 +14,9 @@
       (for/fold ([sum 0])
                 ([i (vector-map * r c)])
         (+ sum i)))))
+
+(define (matmul-chunked m1 m2 n)
+  (let ([chunk (/ (vector-length m1) n)])
+    (apply vector-append
+           (for/list ([worker n])
+             (matmul (vector-copy m1 (* worker chunk) (+ (* worker chunk) chunk)) m2)))))
