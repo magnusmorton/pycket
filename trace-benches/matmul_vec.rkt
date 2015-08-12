@@ -1,5 +1,6 @@
 #lang racket
 
+(define WORKERS (string->number (vector-ref (current-command-line-arguments) 0 )))
 (define (random-vector size)
   (for/vector ([i size])
     (random 10)))
@@ -20,3 +21,6 @@
     (apply vector-append
            (for/list ([worker n])
              (matmul (vector-copy m1 (* worker chunk) (+ (* worker chunk) chunk)) m2)))))
+
+
+(time (matmul-chunked (make-mat 1000 100) (make-mat 100 1000) WORKERS))
