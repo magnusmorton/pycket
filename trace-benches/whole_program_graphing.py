@@ -105,7 +105,7 @@ def graph(costs, times, names, model):
     plt.plot( filtered_costs, filtered_times,  'xg', label="Points included in fit" )
     plt.plot(filtered_costs, fit_fn(filtered_costs), '-b')
     plt.plot( outlier_costs, outlier_times, 'or', label="Points excluded by subsampling")
-    plt.legend()
+    #plt.legend()
     plt.show()
     
 
@@ -158,6 +158,7 @@ def main():
     parser.add_argument("--model", "-m",  default="cmw")
     parser.add_argument( "-k",  action='store_true')
     parser.add_argument( "-s",  action='store_true')
+    parser.add_argument("--times")
     
 
     args = parser.parse_args()
@@ -174,7 +175,11 @@ def main():
         model = [211,34,590,9937,14]
     else:
         model = [int(num) for num in args.model.split(",")]
-    average_times = trace_parser.calculate_average_times()
+
+    if args.times:
+        average_times = {filename:float(time) for time, filename in izip(args.times.split(), args.filenames)}
+    else:
+        average_times = trace_parser.calculate_average_times()
     programs = trace_parser.parse_files(args.filenames)
     counts = {program.name: program.class_counts() for program in programs}
     
@@ -184,6 +189,8 @@ def main():
         print "FOOOOOO"
         costs = [program.cost() for program in programs]
     times = [average_times[program.name] for program in programs]
+    for cost in costs:
+        print cost
     names = [program.name for program in programs]
     graph(costs, times, names, args.model)
     #produce_gnuplot_file(costs, times,names)

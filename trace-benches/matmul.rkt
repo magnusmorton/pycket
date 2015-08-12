@@ -27,9 +27,9 @@
             (for/list ([worker n])
               (m-mult (slice m1 (* worker chunk) chunk) m2)))))
 
-(m-mult test1 test2)
-
-(m-mult-chunked (make-mat 1000 100) (make-mat 100 1000) 2)
+;;(m-mult test1 test2)
+;; (time (m-mult (make-mat 1000 100) (make-mat 100 1000)))
+(time (m-mult-chunked (make-mat 1000 100) (make-mat 100 1000) 10)) 
 ;; -> '((19 22) (43 50))
 
 

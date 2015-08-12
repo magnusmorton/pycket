@@ -8,6 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description="Compare assembly to jit ops")
     parser.add_argument("filenames", metavar="<file>", nargs = '+')
     parser.add_argument("--model", "-m",  default="cmw")
+    parser.add_argument("--text", "-t", action='store_true')
 
     args = parser.parse_args()
     
@@ -24,6 +25,11 @@ def main():
     assembly_counts = [trace.assembly_count for trace in traces if len(trace.ops) < 5000]
     class_counts = [trace.class_counts() for trace in traces if len(trace.ops) < 5000]
     costs = [dot(count, model) for count in class_counts]
+    if args.text:
+        print "COST\tASSEMBLY"
+        for cost, assembly in izip(costs,assembly_counts):
+            print str(cost) + '\t' + str(assembly)
+        return
     plt.ylabel("Assembly counts")
     plt.xlabel("Cost")
     plt.title("Assembly vs Cost")
