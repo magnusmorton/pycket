@@ -6,6 +6,7 @@
 
 import pytest
 import sys
+from pycket        import values
 from pycket.values import w_true
 from pycket.test.testhelper import check_all, check_none, check_equal, run_flo, run_fix, run, run_mod, run_mod_expr
 from pycket.error import SchemeException
@@ -270,6 +271,15 @@ def test_open_input_bytes_and_read_bytes_line(source):
     """
     result = run_mod_expr(source, wrap=True)
     assert result == w_true
+
+def test_read_bytes(source):
+    """
+    (let ([ip (open-input-bytes (bytes 115 101 99 114 101 116))])
+      (read-bytes 6 ip))
+    """
+    result = run_mod_expr(source, wrap=True)
+    assert isinstance(result, values.W_Bytes)
+    assert result.value == list("secret")
 
 def test_read_utf8_bytes_chars(source):
     ur"""
@@ -703,4 +713,23 @@ def test_unsafe_undefined(doctest):
         z)
     3
     """
+
+def test_dynamic_wind(doctest):
+    """
+    > (dynamic-wind (lambda () 1) (lambda () 2) (lambda () 3))
+    2
+    """
+
+def test_bytes_conversions():
+    m = run_mod(
+    """
+    #lang pycket
+    (define a (real->floating-point-bytes 1 8 #f))
+    (define b (integer-bytes->integer a #f))
+    """)
+    a = values.W_Symbol.make("a")
+    b = values.W_Symbol.make("b")
+
+    vb = m.defs[b]
+    assert isinstance(vb, values.W_Fixnum) and vb.value == 4607182418800017408
 

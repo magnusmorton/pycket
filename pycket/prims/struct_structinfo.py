@@ -25,16 +25,16 @@ def do_is_struct(v):
     return values.W_Bool.make(isinstance(v, values_struct.W_RootStruct) and
         values_struct.current_inspector.has_control(v.struct_type()))
 
-@expose("struct-info", [values.W_Object])
-def do_struct_info(v):
+@expose("struct-info", [values.W_Object], simple=False)
+def do_struct_info(v, env, cont):
+    from pycket.interpreter import return_multi_vals
     if (isinstance(v, values_struct.W_RootStruct) and
         values_struct.current_inspector.has_control(v.struct_type())):
-        struct_type = v.struct_type()
-        skipped = values.w_false
-    else:
-        struct_type = values.w_false
-        skipped = values.w_true
-    return values.Values.make([struct_type, skipped])
+        return v.get_struct_info(env, cont)
+    return return_multi_vals(
+            values.Values.make([values.w_false, values.w_true]), env, cont)
+
+struct_info = do_struct_info.w_prim
 
 @expose("struct-type-info", [values_struct.W_StructType])
 def do_struct_type_info(struct_type):
@@ -52,7 +52,7 @@ def do_struct_type_make_predicate(struct_type):
     if struct_type.inspector is not values_struct.current_inspector:
         # TODO: we should raise exn:fail:contract
         raise SchemeException("fail_contract")
-    return struct_type.pred
+    return struct_type.predicate
 
 @expose("make-struct-type",
         [values.W_Symbol, values.W_Object, values.W_Fixnum, values.W_Fixnum,
@@ -65,7 +65,8 @@ def do_struct_type_make_predicate(struct_type):
          default(values.W_Object, values.w_false)], simple=False)
 def do_make_struct_type(name, super_type, init_field_cnt, auto_field_cnt,
         auto_v, props, inspector, proc_spec, immutables, guard, constr_name, env, cont):
-    if not (isinstance(super_type, values_struct.W_StructType) or super_type is values.w_false):
+    if not (isinstance(super_type, values_struct.W_StructType) or
+            super_type is values.w_false):
         raise SchemeException("make-struct-type: expected a struct-type? or #f")
     return values_struct.W_StructType.make(name, super_type, init_field_cnt,
         auto_field_cnt, auto_v, props, inspector, proc_spec, immutables,
@@ -77,8 +78,12 @@ def do_is_struct_accessor_procedure(v):
         isinstance(v, values_struct.W_StructFieldAccessor))
 
 @expose("make-struct-field-accessor", [values_struct.W_StructAccessor,
-    values.W_Fixnum, default(values.W_Symbol, None)])
+    values.W_Fixnum, default(values.W_Object, values.w_false)])
 def do_make_struct_field_accessor(accessor, field, field_name):
+    if field_name is values.w_false:
+        return values_struct.W_StructFieldAccessor(accessor, field, None)
+    if not isinstance(field_name, values.W_Symbol):
+        raise SchemeException("make-struct-field-accessor: expected symbol or #f as argument 2")
     return values_struct.W_StructFieldAccessor(accessor, field, field_name)
 
 @expose("struct-mutator-procedure?", [values.W_Object])
@@ -87,8 +92,12 @@ def do_is_struct_mutator_procedure(v):
         isinstance(v, values_struct.W_StructFieldMutator))
 
 @expose("make-struct-field-mutator", [values_struct.W_StructMutator,
-    values.W_Fixnum, default(values.W_Symbol, None)])
+    values.W_Fixnum, default(values.W_Object, values.w_false)])
 def do_make_struct_field_mutator(mutator, field, field_name):
+    if field_name is values.w_false:
+        return values_struct.W_StructFieldMutator(mutator, field, None)
+    if not isinstance(field_name, values.W_Symbol):
+        raise SchemeException("make-struct-field-mutator: expected symbol or #f as argument 2")
     return values_struct.W_StructFieldMutator(mutator, field, field_name)
 
 @expose("struct->vector", [values_struct.W_RootStruct])

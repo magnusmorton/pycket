@@ -61,6 +61,13 @@ class SymList(object):
             depth += 1
         return -1, -1
 
+    @jit.unroll_safe
+    def contains_sym(self, var):
+        for e in self.elems:
+            if e is var:
+                return True
+        return False
+
     def __repr__(self):
         return "SymList(%r, %r)" % (self.elems, self.prev)
 
@@ -79,6 +86,7 @@ class ModuleEnv(object):
         from pycket.interpreter import Module
         # note that `name` and `module.name` are different!
         assert isinstance(module, Module)
+        #if name not in self.modules:
         self.modules[name] = module
 
     @jit.elidable
