@@ -1,5 +1,5 @@
 from pycket.AST               import AST
-from pycket                   import values, values_string
+from pycket                   import values, values_string, values_parameter
 from pycket                   import vector
 from pycket.prims.expose      import prim_env, make_call_method
 from pycket.error             import SchemeException
@@ -17,6 +17,19 @@ import sys
 # imported for side effects
 import pycket.prims.general
 
+BUILTIN_MODULES = [
+    "#%kernel",
+    "#%unsafe",
+    "#%paramz",
+    "#%flfxnum",
+    "#%utils",
+    "#%place",
+    "#%foreign",
+    "#%builtin",
+    "#%extfl" ]
+
+def is_builtin_module(mod):
+    return mod in BUILTIN_MODULES
 
 class Done(Exception):
     def __init__(self, vals):
@@ -370,17 +383,33 @@ class WCMValCont(Cont):
         self.prev.update_cm(key, val)
         return self.ast.body, self.env, self.prev
 
-class Module(object):
-    _immutable_fields_ = ["name", "body"]
-    def __init__(self, name, body, config):
+class Module(AST):
+    _immutable_fields_ = ["name", "body", "requires", "parent", "submodules", "interpreted?", "lang"]
+    def __init__(self, name, body, config, lang=None):
+        self.parent = None
+        self.lang = lang
+        self.submodules = [b for b in body if isinstance(b, Module)]
+        body = [b for b in body if not isinstance(b, Module)]
         self.name = name
-        self.body = body
+        self.body = [b for b in body if not isinstance(b, Require)]
+        self.requires = [b for b in body if isinstance(b, Require)]
         self.env = None
+        self.interpreted = False
         self.config = config
+        for s in self.submodules:
+            assert isinstance(s, Module)
+            s.set_parent(self)
         defs = {}
         for b in body:
             defs.update(b.defined_vars())
         self.defs = defs
+
+    def rebuild_body(self):
+        return self.requires + self.submodules + self.body
+
+    def set_parent(self, parent):
+        assert isinstance(parent, Module)
+        self.parent = parent
 
     @jit.elidable
     def lookup(self, sym):
@@ -398,27 +427,69 @@ class Module(object):
             x.update(r.mutated_vars())
         return x
 
+    def assign_convert(self, vars, env_structure):
+        return self.assign_convert_module()
+
+    def direct_children(self):
+        return self.rebuild_body()
+
     def assign_convert_module(self):
         local_muts = self.mod_mutated_vars()
-        new_body = [b.assign_convert(local_muts, None) for b in self.body]
-        return Module(self.name, new_body, self.config)
+        new_body = [b.assign_convert(local_muts, None) for b in self.rebuild_body()]
+        return Module(self.name, new_body, self.config, lang=self.lang)
 
     def tostring(self):
         return "(module %s %s)"%(self.name," ".join([s.tostring() for s in self.body]))
 
     def interpret_mod(self, env):
+        if self.interpreted:
+            return values.w_void
         try:
+            self.interpreted = True
             return self._interpret_mod(env)
         except SchemeException, e:
             if e.context_module is None:
                 e.context_module = self
             raise
 
+    @jit.unroll_safe
+    def root_module(self):
+        while self.parent is not None:
+            self = self.parent
+        return self
+
+    @jit.unroll_safe
+    def find_submodule(self, name):
+        if name == ".":
+            return self
+        if name == "..":
+            return self.parent
+        for s in self.submodules:
+            assert isinstance(s, Module)
+            if s.name == name:
+                return s
+        return None
+
+    @jit.unroll_safe
+    def resolve_submodule_path(self, path):
+        for p in path:
+            self = self.find_submodule(p)
+            assert self is not None
+        return self
+
     def _interpret_mod(self, env):
         self.env = env
         module_env = env.toplevel_env().module_env
         old = module_env.current_module
         module_env.current_module = self
+
+        if self.lang is not None:
+            interpret_one(self.lang, self.env)
+        elif self.parent is not None:
+            self.parent.interpret_mod(self.env)
+
+        for r in self.requires:
+            interpret_one(r, self.env)
         for f in self.body:
             # FIXME: this is wrong -- the continuation barrier here is around the RHS,
             # whereas in Racket it's around the whole `define-values`
@@ -436,12 +507,13 @@ class Module(object):
         module_env.current_module = old
 
 class Require(AST):
-    _immutable_fields_ = ["modname", "module"]
+    _immutable_fields_ = ["modname", "modtable", "path[*]"]
     simple = True
 
-    def __init__(self, modname, module):
-        self.modname = modname
-        self.module  = module
+    def __init__(self, fname, modtable, path=None):
+        self.fname    = fname
+        self.path     = path if path is not None else []
+        self.modtable = modtable
 
     def _mutated_vars(self):
         return variable_set()
@@ -449,15 +521,25 @@ class Require(AST):
     def assign_convert(self, vars, env_structure):
         return self
 
+    @jit.elidable
+    def find_module(self, env):
+        if self.modtable is not None:
+            module = self.modtable.lookup(self.fname)
+        else:
+            module = env.toplevel_env().module_env.current_module
+        module = module.resolve_submodule_path(self.path)
+        return module
+
     # Interpret the module and add it to the module environment
     def interpret_simple(self, env):
+        module = self.find_module(env)
         top = env.toplevel_env()
-        top.module_env.add_module(self.modname, self.module)
-        self.module.interpret_mod(top)
+        top.module_env.add_module(self.fname, module.root_module())
+        module.interpret_mod(top)
         return values.w_void
 
     def _tostring(self):
-        return "(require %s)"%self.modname
+        return "(require %s)" % self.fname
 
 empty_vals = values.Values.make([])
 
@@ -933,11 +1015,13 @@ class LexicalVar(Var):
             return LexicalVar(self.sym, env_structure)
 
 class ModuleVar(Var):
-    _immutable_fields_ = ["modenv?", "sym", "srcmod", "srcsym", "w_value?"]
-    def __init__(self, sym, srcmod, srcsym):
+    _immutable_fields_ = ["modenv?", "sym", "srcmod", "srcsym", "w_value?", "path[*]"]
+
+    def __init__(self, sym, srcmod, srcsym, path=None):
         Var.__init__(self, sym)
         self.srcmod = srcmod
         self.srcsym = srcsym
+        self.path   = path if path is not None else []
         self.modenv = None
         self.w_value = None
 
@@ -964,21 +1048,21 @@ class ModuleVar(Var):
 
     @jit.elidable
     def is_primitive(self):
-        return self.srcmod in ["#%kernel", "#%unsafe", "#%paramz", "#%flfxnum", "#%utils", "#%place"]
+        return is_builtin_module(self.srcmod)
 
     @jit.elidable
     def _elidable_lookup(self):
         assert self.modenv
         modenv = self.modenv
-        if self.srcmod is None:
-            mod = modenv.current_module
-        elif self.is_primitive():
+        if self.is_primitive():
             return self._lookup_primitive()
+        elif self.srcmod is None:
+            mod = modenv.current_module
         else:
             mod = modenv._find_module(self.srcmod)
             if mod is None:
                 raise SchemeException("can't find module %s for %s" % (self.srcmod, self.srcsym.tostring()))
-        return mod.lookup(self.srcsym)
+        return mod.resolve_submodule_path(self.path).lookup(self.srcsym)
 
     def _lookup_primitive(self):
         # we don't separate these the way racket does
@@ -1003,7 +1087,6 @@ class ModuleVar(Var):
         v = self._elidable_lookup()
         assert isinstance(v, values.W_Cell)
         v.set_val(w_val)
-
 
 # class ModCellRef(Var):
 #     _immutable_fields_ = ["sym", "srcmod", "srcsym", "modvar"]
@@ -1361,7 +1444,7 @@ class Lambda(SequencedBodyAST):
     @jit.unroll_safe
     def collect_frees_without_recursive(self, recursive_sym, env):
         num_vals = len(self.frees.elems)
-        if recursive_sym is not None:
+        if recursive_sym is not None and self.frees.contains_sym(recursive_sym):
             num_vals -= 1
         vals = [None] * num_vals
         i = 0
@@ -1697,7 +1780,12 @@ class Let(SequencedBodyAST):
                 # we can reuse the var names
                 copied_vars = free_vars_not_from_let.keys()
                 new_rhss = self.rhss[:-1] + [LexicalVar(v) for v in copied_vars] + [self.rhss[-1]]
-                new_lhs_vars = body_env_structure.elems[:-1] + copied_vars + [body_env_structure.elems[-1]]
+
+                idx = self.counts[-1]
+                cutoff = len(body_env_structure.elems) - idx
+                assert cutoff >= 0
+                new_lhs_vars = body_env_structure.elems[:cutoff] + copied_vars + body_env_structure.elems[cutoff:]
+
                 counts = self.counts[:-1] + [1] * len(copied_vars) + [self.counts[-1]]
                 body_env_structure = SymList(new_lhs_vars)
                 sub_env_structure = SymList(new_lhs_vars, sub_env_structure.prev)
@@ -1798,15 +1886,6 @@ def inner_interpret_two_state(ast, env, cont):
     came_from = ast
     config = env.pycketconfig()
     while True:
-        if (not jit.we_are_jitted()) and (not ast.is_label):
-            ast.count += 1
-            if ast.count >= 10000:
-                ast.set_should_enter()
-            if ast.count >= 10000 and (ast.count % 10000 == 0):
-                if (ast.the_lam is not None) and (not ast.in_cycle) and (not "string->num" in ast.the_lam.tostring()) and (not ast.is_bad):
-                    print "hot ast not jitted %s: %s"%(ast.count, ast.tostring())
-                    ast.is_bad = True
-                    #import pdb; pdb.set_trace()
         driver_two_state.jit_merge_point(ast=ast, came_from=came_from, env=env, cont=cont)
         if config.track_header:
             came_from = ast if ast.should_enter else came_from
@@ -1849,7 +1928,7 @@ def interpret_one(ast, env=None):
     else:
         inner_interpret = inner_interpret_one_state
     cont = nil_continuation
-    cont.update_cm(values.parameterization_key, values.top_level_config)
+    cont.update_cm(values.parameterization_key, values_parameter.top_level_config)
     try:
         inner_interpret(ast, env, cont)
     except Done, e:
