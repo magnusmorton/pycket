@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/samth/pycket.png?branch=master)](https://travis-ci.org/samth/pycket)
+[![codecov.io](https://codecov.io/github/samth/pycket/coverage.svg?branch=master)](https://codecov.io/github/samth/pycket?branch=master)
 
 A Racket/Scheme implementation using RPython. It adds a JIT.
 
@@ -10,6 +11,11 @@ In order to do anything with Pycket, you need to check out PyPy:
 
 The below instructions assume that you do this checkout in this directory.
 
+Additionally, it helps to have the build dependencies of PyPy installed.
+On a Debian or Ubuntu system:
+
+    $ sudo apt-get build-dep pypy
+
 You also need a reasonably recent version of Racket, at least version
 6.1.1. Then you need to set up the `pycket` language in Racket:
 
@@ -17,7 +23,11 @@ You also need a reasonably recent version of Racket, at least version
 
 Afterwards you can run the unit-tests as follows:
 
-    $ pypy/pytest.py
+    $ pypy/pytest.py pycket
+
+or using `make`
+
+    $ make test
 
 To produce an executable, run:
 

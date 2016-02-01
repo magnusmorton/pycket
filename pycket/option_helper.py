@@ -66,7 +66,8 @@ def parse_args(argv):
     i = 1
     to = len(argv)
     while i < to:
-        if False: pass
+        if False:
+            pass
         elif argv[i] == "--jit":
             if to <= i + 1:
                 print "missing argument after --jit"
@@ -115,6 +116,8 @@ def parse_args(argv):
             if stop:
                 i += 1
                 break
+        elif argv[i] == '--save-callgraph':
+            config['save-callgraph'] = True
         else:
             if 'file' in names:
                 break
@@ -163,6 +166,9 @@ def ensure_json_ast(config, names):
         file_name = names['file']
         if file_name.endswith('.json'):
             json_file = file_name
+            to = len(file_name) - 5
+            assert to > 0
+            file_name = file_name[:to]
         else:
             try:
                 json_file = ensure_json_ast_run(file_name)
