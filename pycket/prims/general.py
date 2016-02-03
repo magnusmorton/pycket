@@ -38,6 +38,7 @@ from pycket.prims import string
 from pycket.prims import struct_structinfo
 from pycket.prims import undefined
 from pycket.prims import vector
+from pycket.prims import tcp
 
 from rpython.rlib import jit
 

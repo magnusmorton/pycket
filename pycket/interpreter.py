@@ -31,7 +31,7 @@ BUILTIN_MODULES = [
     "#%network" ]
 
 def is_builtin_module(mod):
-    return mod in BUILTIN_MODULES
+    return mod in BUILTIN_MODULES or mod.endswith("pycket-lang/tcp.rkt")
 
 class Done(Exception):
     def __init__(self, vals):
