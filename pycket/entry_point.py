@@ -14,6 +14,7 @@ def make_entry_point(pycketconfig=None):
     from pycket.option_helper import parse_args, ensure_json_ast
     from pycket.values_string import W_String
 
+    from rpython.rlib import jit
 
     def entry_point(argv):
         if not objectmodel.we_are_translated():
@@ -28,6 +29,12 @@ def make_entry_point(pycketconfig=None):
 
     def actual_entry(argv):
         jit.set_param(None, "trace_limit", 1000000)
+
+        # jit.set_param(None, "threshold", 3)
+        # jit.set_param(None, "function_threshold", 7)
+#        jit.set_param(None, "trace_eagerness", 5) # 
+
+        # Pycket defaults
         jit.set_param(None, "threshold", 131)
         jit.set_param(None, "trace_eagerness", 50)
 
@@ -54,8 +61,26 @@ def make_entry_point(pycketconfig=None):
         env.commandline_arguments = args_w
         env.module_env.add_module(module_name, ast)
         try:
+            from rpython.rlib import jit_hooks
+            print ""
+            print "BEGIN"
+            print "======="
+            jit_hooks.stats_set_debug(None, True)
             val = interpret_module(ast, env)
         finally:
+            from rpython.rlib import jit_hooks
+            from rpython.rlib.jit import JitHookInterface, Counters
+
+            print "TIMES: "
+            ll_times =  jit_hooks.stats_get_loop_run_times(None)
+            for i in range(len(ll_times)):
+                print "loop ", ll_times[i].type, ll_times[i].number, ll_times[i].counter
+            
+            tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
+            b_time = jit_hooks.stats_get_times_value(None, Counters.BACKEND)
+            print "TRACING:", tr_time
+            print "BACKEND:", b_time
+            print "END ANALYSIS"
             from pycket.prims.input_output import shutdown
             if config.get('save-callgraph', False):
                 with open('callgraph.dot', 'w') as outfile:
