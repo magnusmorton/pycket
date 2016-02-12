@@ -1,6 +1,8 @@
 from rpython.rlib import jit_hooks
 from rpython.rlib.jit import JitHookInterface, Counters
 from rpython.rlib.objectmodel import compute_unique_id, current_object_addr_as_int, compute_hash
+from pycket.analysis.simple import Simple
+
 from pycket.trace import Trace, Bridge
 
 from pycket.error import SchemeException
@@ -57,3 +59,5 @@ def _output(debug_info):
     print "END TRACE"
     print "ASSEMBLY", debug_info.asminfo.asmlen,
     print "from ops:", len(debug_info.operations)
+
+pycket_hooks = PycketJitInterface(Simple())
