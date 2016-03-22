@@ -7,6 +7,15 @@ import os
 from rpython.rlib          import jit, objectmodel
 from rpython.rlib.nonconst import NonConstant
 
+class TopLevelHolder(object):
+    
+    def __str__(self):
+        return "TopLevelHolder"
+
+toplevel_holder = TopLevelHolder()
+toplevel_holder.toplevel_env = None
+toplevel_holder.toplevel_list = None
+
 def make_entry_point(pycketconfig=None):
     from pycket.expand import load_json_ast_rpython, expand_to_ast, PermException, ModTable
     from pycket.interpreter import interpret_one, ToplevelEnv, interpret_module
@@ -57,6 +66,8 @@ def make_entry_point(pycketconfig=None):
         modtable.exit_module(module_name, ast)
 
         env = ToplevelEnv(pycketconfig)
+        toplevel_holder.toplevel_env = env
+        toplevel_holder.toplevel_list = []
         env.globalconfig.load(ast)
         env.commandline_arguments = args_w
         env.module_env.add_module(module_name, ast)
@@ -65,22 +76,23 @@ def make_entry_point(pycketconfig=None):
             print ""
             print "BEGIN"
             print "======="
-            jit_hooks.stats_set_debug(None, True)
+            # jit_hooks.stats_set_debug(None, True)
             val = interpret_module(ast, env)
         finally:
             from rpython.rlib import jit_hooks
             from rpython.rlib.jit import JitHookInterface, Counters
 
             print "TIMES: "
-            ll_times =  jit_hooks.stats_get_loop_run_times(None)
+            ll_times = []
+            # ll_times =  jit_hooks.stats_get_loop_run_times(None)
             for i in range(len(ll_times)):
                 print "loop ", ll_times[i].type, ll_times[i].number, ll_times[i].counter
             
-            tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
-            b_time = jit_hooks.stats_get_times_value(None, Counters.BACKEND)
-            print "TRACING:", tr_time
-            print "BACKEND:", b_time
-            print "END ANALYSIS"
+            # tr_time = jit_hooks.stats_get_times_value(None, Counters.TRACING)
+            # b_time = jit_hooks.stats_get_times_value(None, Counters.BACKEND)
+            # print "TRACING:", tr_time
+            # print "BACKEND:", b_time
+            # print "END ANALYSIS"
             from pycket.prims.input_output import shutdown
             if config.get('save-callgraph', False):
                 with open('callgraph.dot', 'w') as outfile:
