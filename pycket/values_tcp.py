@@ -2,6 +2,7 @@ from rpython.rlib.rsocket import INETAddress, RSocket, SocketError, \
                                  AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY
 
 from pycket.base  import W_Object
+import time
 #from pycket.error import SchemeException
 
 
@@ -73,7 +74,10 @@ class W_TCPSocket(W_TCPSocketWrapper):
 
     def sendall(self, data):
         assert isinstance(data, str)
+        initial = time.clock()
         self.sock.sendall(data)
+        final = time.clock()
+        print "PYCKET SEND TIME:", final
         # XXX: Catch SocketError, raise as SchemeException?
 
     def recv(self, size):
