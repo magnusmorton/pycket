@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 if [ -d "pypy" ]; then
     cd pypy
     hg up
