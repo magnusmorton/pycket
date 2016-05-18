@@ -5,7 +5,7 @@
 from rpython.jit.codewriter.policy import JitPolicy
 
 from pycket.entry_point import target, get_additional_config_options, take_options
-from pycket.jit.hooks import test_hooks
+from pycket.jit.hooks import hooks
 from pycket.analysis.simple import Simple
 
 if __name__ == '__main__':
@@ -16,5 +16,5 @@ if __name__ == '__main__':
 def jitpolicy(driver):
     """Defines a JitPolicy for pycket"""
     print "POLICY_CALLED"
-    return JitPolicy(test_hooks)
+    return JitPolicy(hooks)
 

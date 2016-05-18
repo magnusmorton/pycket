@@ -1,19 +1,12 @@
 #lang racket/base
-
+(require racket/list)
 (provide
  counters
- magtest)
+ get-trace-db)
 ;; returns hash of tuples
 ;; key is loop/label/guard id
 ;; tuple contains counter value and type (type may be removed at some point)
 (define (counters)
-  (void))
-
-
-(define (silly)
-  (display "bar\n"))
-
-(define (magtest)
   (void))
 
 ;; returns hash of tuples (representing all fragments)

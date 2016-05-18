@@ -1,7 +1,7 @@
 from rpython.rlib import jit, jit_hooks
 
 from pycket.prims.expose import expose, default
-from pycket.values import W_Cons, wrap, W_Symbol
+from pycket.values import W_Cons, wrap, W_Symbol, w_null
 from pycket.values_string import W_String
 from pycket.vector import wrap_vector
 from pycket.hash.simple import make_simple_immutable_table
@@ -21,14 +21,33 @@ from pycket.cont import NilCont
                         # toplevel_holder.toplevel_env, NilCont())
 
 
+@expose("get-trace-db")
+@jit.dont_look_inside
+def get_trace_db(args):
+    w_trace_symbol = W_Symbol.make("traces")
+    env = toplevel_holder.toplevel_env
+    if toplevel_holder.toplevel_env.module_env.modules:
+        for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
+            if key.endswith("trace-info.rkt"):
+                if w_trace_symbol in value.defs:
+                    return value.defs[w_trace_symbol]
+                else:
+                    return w_null
+                        
 @expose("counters")
 @jit.dont_look_inside
 def counters(args):
     def bar():
         print "bar"
     print "HELLO!!!111"
-    print toplevel_holder.toplevel_list
+    
+    if toplevel_holder.toplevel_env.module_env.modules:
+        for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
+            if key.endswith("trace-info.rkt"):
+                print "IN THIS MODULE"
+        
     print "HELLO AGAIN"
+
     # if counters.foo:
         # for fo in counters.foo:
     # for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
