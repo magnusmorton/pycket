@@ -117,6 +117,7 @@ for args in [
         ("ctype?", W_CType),
         ("continuation-prompt-tag?", values.W_ContinuationPromptTag),
         ("logger?", values.W_Logger),
+        ("evt?", values.W_Evt),
         ]:
     make_pred(*args)
 
@@ -209,19 +210,19 @@ expose_val("prop:output-port", values_struct.w_prop_output_port)
 expose_val("prop:input-port", values_struct.w_prop_input_port)
 
 @continuation
-def check_cont(proc, v, v1, v2, env, cont, _vals):
+def check_cont(proc, v, v1, v2, app, env, cont, _vals):
     from pycket.interpreter import check_one_val, return_value
     val = check_one_val(_vals)
     if val is not values.w_false:
-        return return_value(v._ref(1), env, cont)
+        return v.ref_with_extra_info(1, app, env, cont)
     return proc.call([v, v1, v2], env, cont)
 
 @continuation
-def receive_first_field(proc, v, v1, v2, env, cont, _vals):
+def receive_first_field(proc, v, v1, v2, app, env, cont, _vals):
     from pycket.interpreter import check_one_val
     first_field = check_one_val(_vals)
     return first_field.call([v1, v2], env,
-                            check_cont(proc, v, v1, v2, env, cont))
+                            check_cont(proc, v, v1, v2, app, env, cont))
 
 @expose("checked-procedure-check-and-extract",
         [values_struct.W_StructType, values.W_Object, procedure,
@@ -231,11 +232,11 @@ def do_checked_procedure_check_and_extract(type, v, proc, v1, v2, env, cont, cal
     from pycket.interpreter import check_one_val, return_value
     if isinstance(v, values_struct.W_RootStruct):
         struct_type = jit.promote(v.struct_type())
-        while isinstance(struct_type, values_struct.W_StructType):
-            if struct_type is type:
-                return v.ref_with_extra_info(0, calling_app, env,
-                        receive_first_field(proc, v, v1, v2, env, cont))
-            struct_type = struct_type.super
+        if type.has_subtype(struct_type):
+            offset = struct_type.get_offset(type)
+            assert offset != -1
+            return v.ref_with_extra_info(offset, calling_app, env,
+                    receive_first_field(proc, v, v1, v2, calling_app, env, cont))
     return proc.call([v, v1, v2], env, cont)
 
 ################################################################
@@ -265,9 +266,8 @@ def define_struct(name, super=values.w_null, fields=[]):
     expose_val("make-" + name, struct_constr)
     expose_val(name + "?", struct_pred)
     for field, field_name in enumerate(fields):
-        w_num = field
-        w_name = values.W_Symbol.make(field_name)
-        acc = values_struct.W_StructFieldAccessor(struct_acc, w_num, w_name)
+        w_name =  values.W_Symbol.make(field_name)
+        acc = values_struct.W_StructFieldAccessor(struct_acc, field, w_name)
         expose_val(name + "-" + field_name, acc)
     return struct_type
 
@@ -368,9 +368,7 @@ for args in [ ("subprocess?",),
               ("thread-running?",),
               ("thread-dead?",),
               ("will-executor?",),
-              ("evt?",),
               ("semaphore-try-wait?",),
-              ("channel?",),
               ("readtable?",),
               ("link-exists?",),
               ("rename-transformer?",),
@@ -528,11 +526,10 @@ def do_is_procedure_arity(n):
 @expose("procedure-arity-includes?",
         [procedure, values.W_Integer, default(values.W_Object, values.w_false)])
 def procedure_arity_includes(proc, k, kw_ok):
-    if kw_ok is values.w_false:
-        if isinstance(proc, values_struct.W_RootStruct):
-            w_prop_val = proc.struct_type().read_prop(values_struct.w_prop_incomplete_arity)
-            if w_prop_val is not None:
-                return values.w_false
+    if kw_ok is values.w_false and isinstance(proc, values_struct.W_RootStruct):
+        w_prop_val = proc.struct_type().read_prop(values_struct.w_prop_incomplete_arity)
+        if w_prop_val is not None:
+            return values.w_false
     arity = proc.get_arity()
     if isinstance(k, values.W_Integer):
         try:
@@ -1250,7 +1247,7 @@ def mpi_resolve(a):
 # FIXME: Proper semantics.
 @expose("load", [values_string.W_String], simple=False)
 def load(lib, env, cont):
-    from pycket.expand import ensure_json_ast_run, load_json_ast_rpython
+    from pycket.expand import ensure_json_ast_run
     lib_name = lib.tostring()
     json_ast = ensure_json_ast_run(lib_name)
     if json_ast is None:
@@ -1395,5 +1392,6 @@ make_stub_predicates(
     "internal-definition-context?",
     "namespace?",
     "security-guard?",
-    "compiled-module-expression?")
+    "compiled-module-expression?",
+    "channel?")
 

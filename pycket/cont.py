@@ -13,7 +13,7 @@ class Link(object):
         self.next = next
 
     @jit.unroll_safe
-    def clone(self):
+    def clone_links(self):
         marks = None
         while self is not None:
             marks = Link(self.key, self.val, marks)
@@ -23,7 +23,8 @@ class Link(object):
 class BaseCont(object):
     # Racket also keeps a separate stack for continuation marks
     # so that they can be saved without saving the whole continuation.
-    _immutable_fields_ = ['return_safe']
+    _attrs_ = ['marks']
+    _immutable_fields_ = []
 
     # This field denotes whether or not it is safe to directly invoke the
     # plug_reduce operation of the continuation.
@@ -32,10 +33,22 @@ class BaseCont(object):
     def __init__(self):
         self.marks = None
 
+    def has_unwind(self):
+        return False
+
+    def has_rewind(self):
+        return False
+
+    def unwind(self, env, cont):
+        from pycket.interpreter import return_void
+        return return_void(env, cont)
+
     def clone(self):
         result = self._clone()
         if self.marks is not None:
-            result.marks = self.marks.clone()
+            result.marks = self.marks.clone_links()
+        else:
+            result.marks = None
         return result
 
     def _clone(self):
@@ -87,6 +100,9 @@ class BaseCont(object):
             p = p.get_previous_continuation(upto=upto)
         return None
 
+    def append(self, tail, upto=None, stop=None):
+        return tail
+
     def plug_reduce(self, _vals, env):
         raise NotImplementedError("abstract method")
 
@@ -108,9 +124,10 @@ class NilCont(BaseCont):
         raise Done(vals)
 
 class Cont(BaseCont):
+
     _immutable_fields_ = ['env', 'prev']
+
     def __init__(self, env, prev):
-        # TODO: Consider using a dictionary to store the marks
         BaseCont.__init__(self)
         self.env = env
         self.prev = prev
@@ -123,6 +140,15 @@ class Cont(BaseCont):
 
     def get_next_executed_ast(self):
         return self.prev.get_next_executed_ast()
+
+    def append(self, tail, upto=None, stop=None):
+        if self is stop:
+            return self.clone()
+        rest = self.prev.append(tail, upto, stop)
+        head = self.clone()
+        assert isinstance(head, Cont)
+        head.prev = rest
+        return head
 
     def get_marks(self, key, upto=[]):
         from pycket import values
@@ -152,6 +178,11 @@ class Prompt(Cont):
             if tag is self.tag:
                 return None
         return self.prev
+
+    def append(self, tail, upto=None, stop=None):
+        if upto is self.tag or stop is tail:
+            return tail
+        return Cont.append(self, tail, upto, stop)
 
     def plug_reduce(self, _vals, env):
         return self.prev.plug_reduce(_vals, env)
@@ -216,7 +247,7 @@ def continuation(func):
         self._init_args(*args)
     PrimCont.__init__ = __init__
 
-    def clone(self):
+    def _clone(self):
         result = objectmodel.instantiate(PrimCont)
         Cont.__init__(result, self.env, self.prev)
         self._copy_args(result)
@@ -227,7 +258,7 @@ def continuation(func):
         args += (self.env, self.prev, vals,)
         return func(*args)
 
-    PrimCont.clone = clone
+    PrimCont._clone = _clone
     PrimCont.plug_reduce = plug_reduce
     PrimCont.__name__ = func.func_name + "PrimCont"
 
@@ -238,6 +269,7 @@ def continuation(func):
     return make_continuation
 
 def make_label(func, enter=False):
+    import pycket.values
     from pycket.AST import AST
 
     func = jit.unroll_safe(func)
@@ -295,11 +327,16 @@ def make_label(func, enter=False):
 
     return make
 
-# Choose whether or not to use a loop label based on a given predicate
-def guarded_loop(pred):
+# Choose whether or not to use a loop label based on a given predicate.
+# The always_use_labels parameter will ensure that a label is used whether the
+# predicate tests True or False.
+# When always_use_labels is False, we will only use a label when the predicate
+# is true, saving the overhead of trampolining under the assumption that the
+# predicate gives some indication of the recursion depth.
+def guarded_loop(pred, always_use_labels=True):
     def wrapper(func):
         loop   = make_label(func, enter=True)
-        noloop = make_label(func, enter=False)
+        noloop = make_label(func, enter=False) if always_use_labels else func
         return lambda *args: loop(*args) if pred(*args) else noloop(*args)
     return wrapper
 
@@ -324,3 +361,4 @@ def call_cont(proc, env, cont, vals):
 @continuation
 def call_extra_cont(proc, calling_app, env, cont, vals):
     return proc.call_with_extra_info(vals.get_all_values(), env, cont, calling_app)
+

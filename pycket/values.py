@@ -3,8 +3,8 @@
 
 from pycket                   import config
 from pycket.arity             import Arity
-from pycket.base              import W_Object, W_ProtoObject
-from pycket.cont              import continuation, label, BaseCont
+from pycket.base              import W_Object, W_ProtoObject, UnhashableType
+from pycket.cont              import continuation, label, NilCont
 from pycket.env               import ConsEnv
 from pycket.error             import SchemeException
 from pycket.prims.expose      import make_call_method
@@ -24,6 +24,18 @@ from rpython.rlib.debug import check_list_of_chars, make_sure_not_resized, check
 
 UNROLLING_CUTOFF = 5
 
+def elidable_iff(pred):
+    def wrapper(func):
+        func = jit.unroll_safe(func)
+
+        def trampoline(*args):
+            if jit.we_are_jitted() and pred(*args):
+                return elidable_func(*args)
+            return func(*args)
+
+        return trampoline
+    return wrapper
+
 @inline_small_list(immutable=True, attrname="vals", factoryname="_make")
 class Values(W_ProtoObject):
     def __init__(self):
@@ -39,6 +51,10 @@ class Values(W_ProtoObject):
     def make1(w_value):
         assert w_value is not None
         return w_value
+
+    @staticmethod
+    def make2(w_value1, w_value2):
+        return Values._make2(w_value1, w_value2)
 
     def num_values(self):
         return self._get_size_list()
@@ -185,12 +201,10 @@ class W_ContinuationMarkKey(W_Object):
     def __init__(self, name):
         self.name = name
 
-    @label
     def get_cmk(self, value, env, cont):
         from pycket.interpreter import return_value
         return return_value(value, env, cont)
 
-    @label
     def set_cmk(self, body, value, update, env, cont):
         update.update_cm(self, value)
         return body.call([], env, cont)
@@ -212,10 +226,10 @@ class W_VectorSuper(W_Object):
     def __init__(self):
         raise NotImplementedError("abstract base class")
 
-    def vector_set(self, i, new, env, cont):
+    def vector_set(self, i, new, env, cont, app=None):
         raise NotImplementedError("abstract base class")
 
-    def vector_ref(self, i, env, cont):
+    def vector_ref(self, i, env, cont, app=None):
         raise NotImplementedError("abstract base class")
 
     def length(self):
@@ -232,13 +246,13 @@ class W_VectorSuper(W_Object):
     def get_storage(self):
         raise NotImplementedError
 
-    def set_storage(self):
+    def set_storage(self, storage):
         raise NotImplementedError
 
     def get_strategy(self):
         raise NotImplementedError
 
-    def set_strategy(self):
+    def set_strategy(self, strategy):
         raise NotImplementedError
 
 # Things that are vector?
@@ -371,6 +385,9 @@ class W_Box(W_Object):
     errorname = "box"
     def __init__(self):
         raise NotImplementedError("abstract base class")
+
+    def hash_equal(self, info=None):
+        raise UnhashableType
 
     def unbox(self, env, cont):
         raise NotImplementedError("abstract base class")
@@ -1078,9 +1095,6 @@ class W_Prim(W_Procedure):
     def get_result_arity(self):
         return self.result_arity
 
-    def call(self, args, env, cont):
-        return self.call_with_extra_info(args, env, cont, None)
-
     def call_with_extra_info(self, args, env, cont, extra_call_info):
         jit.promote(self)
         return self.code(args, env, cont, extra_call_info)
@@ -1157,15 +1171,41 @@ def from_list_iter(lst):
 
 class W_Continuation(W_Procedure):
     errorname = "continuation"
-    _immutable_fields_ = ["cont"]
-    def __init__ (self, cont):
+
+    _immutable_fields_ = ["cont", "prompt_tag"]
+
+    def __init__(self, cont, prompt_tag=None):
         self.cont = cont
+        self.prompt_tag = prompt_tag
+
     def get_arity(self):
         # FIXME: see if Racket ever does better than this
         return Arity.unknown
+
     def call(self, args, env, cont):
-        from pycket.interpreter import return_multi_vals
-        return return_multi_vals(Values.make(args), env, self.cont)
+        from pycket.prims.control import install_continuation
+        return install_continuation(self.cont, self.prompt_tag, args, env, cont)
+
+    def tostring(self):
+        return "#<continuation>"
+
+class W_ComposableContinuation(W_Procedure):
+    errorname = "composable-continuation"
+
+    _immutable_fields_ = ["cont", "prompt_tag"]
+
+    def __init__(self, cont, prompt_tag=None):
+        self.cont = cont
+        self.prompt_tag = prompt_tag
+
+    def get_arity(self):
+        return Arity.unknown
+
+    def call(self, args, env, cont):
+        from pycket.prims.control import install_continuation
+        return install_continuation(
+                self.cont, self.prompt_tag, args, env, cont, extend=True)
+
     def tostring(self):
         return "#<continuation>"
 
@@ -1439,7 +1479,6 @@ class W_StringInputPort(W_InputPort):
         self.ptr = 0
 
     def readline(self):
-        # import pdb; pdb.set_trace()
         from rpython.rlib.rstring import find
         start = self.ptr
         assert start >= 0
