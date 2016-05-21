@@ -5,6 +5,7 @@ if [ ! -d "pypy" ]; then
 fi
     
 cd pypy
-hg up release-5.1.2
+hg up -r release-5.1.2
+patch < ../counters_workaround.patch -p1
 cd -
 

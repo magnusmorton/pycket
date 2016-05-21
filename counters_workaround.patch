@@ -1,0 +1,12 @@
+diff -r 80ef432a32d9 rpython/jit/metainterp/compile.py
+--- a/rpython/jit/metainterp/compile.py	Mon May 16 20:39:00 2016 +0200
++++ b/rpython/jit/metainterp/compile.py	Sat May 21 23:30:59 2016 +0100
+@@ -481,7 +481,7 @@
+     return metainterp_sd.cpu.compile_loop(inputargs,
+                                           operations, looptoken,
+                                           jd_id=jd_id, unique_id=unique_id,
+-                                          log=log, name=name,
++                                          log=True, name=name,
+                                           logger=metainterp_sd.logger_ops)
+ 
+ def do_compile_bridge(metainterp_sd, faildescr, inputargs, operations,
