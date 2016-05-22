@@ -66,35 +66,39 @@ class FunctionJitInterface(JitHookInterface):
 
 class AJPJitInterface(JitHookInterface):
 
-    def after_compile(self, debug_info):
-        from pycket.values import W_Symbol, w_null, W_Cons, W_Fixnum
+    def _store_trace(self, w_symbol, w_trace, token):
+        from pycket.values import w_null, W_Cons, W_Fixnum
         from pycket.hash.simple import make_simple_mutable_table, W_EqvMutableHashTable
         from pycket.cont import NilCont
-        w_trace_symbol = W_Symbol.make("traces")
-        w_trace = self._after_compile(debug_info)
         env = toplevel_holder.toplevel_env
         if toplevel_holder.toplevel_env.module_env.modules:
+            #TODO: memoize this
             for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
                 if key.endswith("trace-info.rkt"):
                     print key
-                    if w_trace_symbol not in value.defs:
-                        value.defs[w_trace_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
-                    w_traces = value.defs[w_trace_symbol]
-                    w_new_traces = W_Cons.make(w_trace, w_traces)
-                    w_traces.hash_set(W_Fixnum(debug_info.looptoken.number), w_new_traces, toplevel_holder.toplevel_env, NilCont())
+                    if w_symbol not in value.defs:
+                        value.defs[w_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
+                    w_traces = value.defs[w_symbol]
+                    w_traces.hash_set(W_Fixnum(token), w_trace, toplevel_holder.toplevel_env, NilCont())
                     break
-                        
-                    
-                    
+
+    def after_compile(self, debug_info):
+        from pycket.values import W_Symbol, w_null, W_Cons, W_Fixnum
+       
+        w_trace_symbol = W_Symbol.make("traces")
+        w_trace = self._after_compile(debug_info)
+        self._store_trace(w_trace_symbol, w_trace, debug_info.looptoken.number)
+
+    
                     
 
     def after_compile_bridge(self, debug_info):
         from pycket.values import W_Symbol
         w_bridge_symbol = W_Symbol.make("bridges")
         w_bridge = self._after_compile(debug_info)
+        self._store_trace(w_bridge_symbol, w_bridge, compute_unique_id(debug_info.fail_descr))
 
     def _after_compile(self, debug_info):
-        print "getting ops..."
         from pycket.values import W_Cons, wrap_list, W_Fixnum
         from pycket.values_string import W_String
         trace = []
