@@ -12,7 +12,7 @@
 ;; returns hash of tuples (representing all fragments)
 ;; key is loop/label/guard id
 ;; value is fragment cost
-(define (get-trace-db)
+(define (get-trace-db symbol)
   (void))
 
 

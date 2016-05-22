@@ -21,10 +21,10 @@ from pycket.cont import NilCont
                         # toplevel_holder.toplevel_env, NilCont())
 
 
-@expose("get-trace-db")
+@expose("get-trace-db" [W_String])
 @jit.dont_look_inside
-def get_trace_db(args):
-    w_trace_symbol = W_Symbol.make("traces")
+def get_trace_db(symbol):
+    w_trace_symbol = W_Symbol.make(symbol.tostring())
     env = toplevel_holder.toplevel_env
     if toplevel_holder.toplevel_env.module_env.modules:
         for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
