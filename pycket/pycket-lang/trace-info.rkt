@@ -3,6 +3,7 @@
 (provide
  counters
  get-trace-db)
+
 ;; returns hash of tuples
 ;; key is loop/label/guard id
 ;; tuple contains counter value and type (type may be removed at some point)

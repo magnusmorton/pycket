@@ -1,10 +1,10 @@
 from rpython.rlib import jit, jit_hooks
 
 from pycket.prims.expose import expose, default
-from pycket.values import W_Cons, wrap, W_Symbol, w_null
+from pycket.values import W_Cons, wrap, W_Symbol, w_null, W_Fixnum, wrap_list
 from pycket.values_string import W_String
 from pycket.vector import wrap_vector
-from pycket.hash.simple import make_simple_immutable_table
+from pycket.hash.simple import make_simple_immutable_table, W_EqvImmutableHashTable
 from pycket.entry_point import toplevel_holder
 from pycket.cont import NilCont
 #traces = []
@@ -21,10 +21,17 @@ from pycket.cont import NilCont
                         # toplevel_holder.toplevel_env, NilCont())
 
 
-@expose("get-trace-db" [W_String])
+@expose("get-trace-db",  [W_String])
 @jit.dont_look_inside
-def get_trace_db(symbol):
-    w_trace_symbol = W_Symbol.make(symbol.tostring())
+def get_trace_db(w_symbol_string):
+    #bad hack. Expediency makes necessity. Actually maybe this wasn't necessary.
+    symbol_string = w_symbol_string.tostring()
+    print symbol_string
+    w_trace_symbol=w_null
+    if symbol_string == "traces":
+        w_trace_symbol = W_Symbol.make("traces")
+    else:
+        w_trace_symbol = W_Symbol.make("bridges")
     env = toplevel_holder.toplevel_env
     if toplevel_holder.toplevel_env.module_env.modules:
         for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
@@ -37,63 +44,30 @@ def get_trace_db(symbol):
 @expose("counters")
 @jit.dont_look_inside
 def counters(args):
-    def bar():
-        print "bar"
-    print "HELLO!!!111"
-    
-    if toplevel_holder.toplevel_env.module_env.modules:
-        for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
-            if key.endswith("trace-info.rkt"):
-                print "IN THIS MODULE"
-        
-    print "HELLO AGAIN"
+    ll_times = jit_hooks.stats_get_loop_run_times(None)
+    e_keys = []
+    e_vals = []
+    l_keys = []
+    l_vals = []
+    b_keys = []
+    b_vals = []
+    if ll_times:
+        for i in range(len(ll_times)):
+            curr = ll_times[i]
+            tag = W_Fixnum(curr.number)
+            count = W_Fixnum(curr.counter)
+            if curr.type == 'e':
+                e_keys.append(tag)
+                e_vals.append(count)
+            elif curr.type == 'l':
+                l_keys.append(tag)
+                l_vals.append(count)
+            elif curr.type == 'b':
+                b_keys.append(tag)
+                b_vals.append(count)
 
-    # if counters.foo:
-        # for fo in counters.foo:
-    # for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
-        # if key.endswith("fib-traces.rkt"):
-            # print "in fib-traces"
-            # from pycket.values import W_Symbol
-            # from pycket.cont import NilCont
-            # # value.defs[W_Symbol.make("bar")].call([],
-                    # # toplevel_holder.toplevel_env, NilCont())        # print fo
-            # value.defs[W_Symbol.make("foo")] = W_String.make("bar")
-    print "AND AGAIN"
-    # traces = get_traces()
-    # assert traces is not None
-    # if traces:
-        # print "there are some traces"
-        # trace = traces.value
-        # if trace:
-            # print "trace"
-            # print trace
-    # ll_times = jit_hooks.stats_get_loop_run_times(None)
-    # e_keys = []
-    # e_vals = []
-    # l_keys = []
-    # l_vals = []
-    # b_keys = []
-    # b_vals = []
-    # if ll_times:
-        # for i in range(len(ll_times)):
-            # curr = ll_times[i]
-            # print "foo"
-            # print "foo,", ll_times[i].counter
-            # print curr.counter
-            # # tag = wrap(curr.number)
-    #         count = wrap(curr.counter)
-    #         if curr.type == 'e':
-    #             e_keys.append(tag)
-    #             e_vals.append(count)
-    #         elif curr.type == 'l':
-    #             l_keys.append(tag)
-    #             l_vals.append(count)
-    #         elif curr.type == 'b':
-    #             b_keys.append(tag)
-    #             b_vals.append(count)
+    e_hash = make_simple_immutable_table(W_EqvImmutableHashTable, e_keys, e_vals)
+    l_hash = make_simple_immutable_table(W_EqvImmutableHashTable,l_keys, l_vals)
+    b_hash = make_simple_immutable_table(W_EqvImmutableHashTable,b_keys, b_vals)
 
-    # e_hash = make_simple_immutable_table(wrap(e_keys), wrap(e_vals))
-    # l_hash = make_simple_immutable_table(wrap(l_keys), wrap(l_vals))
-    # b_hash = make_simple_immutable_table(wrap(b_keys), wrap(b_vals))
-    
-    # return wrap_vector([e_hash,l_hash,b_hash])
+    return wrap_list([e_hash,l_hash,b_hash])
