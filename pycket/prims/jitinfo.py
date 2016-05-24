@@ -45,29 +45,17 @@ def get_trace_db(w_symbol_string):
 @jit.dont_look_inside
 def counters(args):
     ll_times = jit_hooks.stats_get_loop_run_times(None)
-    e_keys = []
-    e_vals = []
     l_keys = []
     l_vals = []
-    b_keys = []
-    b_vals = []
     if ll_times:
         for i in range(len(ll_times)):
             curr = ll_times[i]
             tag = W_Fixnum(curr.number)
             count = W_Fixnum(curr.counter)
-            if curr.type == 'e':
-                e_keys.append(tag)
-                e_vals.append(count)
-            elif curr.type == 'l':
-                l_keys.append(tag)
-                l_vals.append(count)
-            elif curr.type == 'b':
-                b_keys.append(tag)
-                b_vals.append(count)
+            l_keys.append(tag)
+            l_vals.append(count)
 
-    e_hash = make_simple_immutable_table(W_EqvImmutableHashTable, e_keys, e_vals)
-    l_hash = make_simple_immutable_table(W_EqvImmutableHashTable,l_keys, l_vals)
-    b_hash = make_simple_immutable_table(W_EqvImmutableHashTable,b_keys, b_vals)
+    return  make_simple_immutable_table(W_EqvImmutableHashTable,l_keys, l_vals)
 
-    return wrap_list([e_hash,l_hash,b_hash])
+
+
