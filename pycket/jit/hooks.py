@@ -102,7 +102,7 @@ class AJPJitInterface(JitHookInterface):
     def _after_compile(self, debug_info, token, ttype):
         from pycket.values import W_Cons, wrap_list, W_Fixnum, W_Symbol
         from pycket.values_string import W_String
-        trace = [W_Cons.make(ttype, W_Fixnum(token))]
+        trace = [W_Cons.make(W_String.make(ttype.variable_name()), W_Fixnum(token))]
         for op in debug_info.operations:
             car = op.getopname()
             cdr = -1
