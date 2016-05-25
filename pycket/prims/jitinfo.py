@@ -21,17 +21,10 @@ from pycket.cont import NilCont
                         # toplevel_holder.toplevel_env, NilCont())
 
 
-@expose("get-trace-db",  [W_String])
+@expose("get-trace-db")
 @jit.dont_look_inside
-def get_trace_db(w_symbol_string):
-    #bad hack. Expediency makes necessity. Actually maybe this wasn't necessary.
-    symbol_string = w_symbol_string.tostring()
-    print symbol_string
-    w_trace_symbol=w_null
-    if symbol_string == "traces":
-        w_trace_symbol = W_Symbol.make("traces")
-    else:
-        w_trace_symbol = W_Symbol.make("bridges")
+def get_trace_db(args):
+    w_trace_symbol=W_Symbol.make("traces")
     env = toplevel_holder.toplevel_env
     if toplevel_holder.toplevel_env.module_env.modules:
         for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
