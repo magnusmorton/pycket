@@ -66,11 +66,12 @@ class FunctionJitInterface(JitHookInterface):
 
 class AJPJitInterface(JitHookInterface):
 
-    def _store_trace(self,keys, frags):
+    def _store_trace(self,keys, frags, guards):
         from pycket.values import w_null, W_Cons, W_Fixnum, W_Symbol
         from pycket.hash.simple import make_simple_mutable_table, W_EqvMutableHashTable
         from pycket.cont import NilCont
         w_symbol = W_Symbol.make("traces")
+        w_guard_symbol = W_Symbol.make("guards")
         env = toplevel_holder.toplevel_env
         if toplevel_holder.toplevel_env.module_env.modules:
             #TODO: Improve performance
@@ -78,51 +79,45 @@ class AJPJitInterface(JitHookInterface):
                 if path.endswith("trace-info.rkt"):
                     if w_symbol not in value.defs:
                         value.defs[w_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
+                    if w_guard_symbol not in value.defs:
+                        value.defs[w_guard_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
                     w_traces = value.defs[w_symbol]
+                    w_guards = value.defs[w_guard_symbol]
                     for i, key in enumerate(keys):
-                        print key
                         w_traces.hash_set(key, frags[i], toplevel_holder.toplevel_env, NilCont())
+                        w_guards.hash_set(key, guards[i], toplevel_holder.toplevel_env, NilCont())
                     break
 
     def after_compile(self, debug_info):
         from pycket.values import W_Symbol, w_null, W_Cons, W_Fixnum
-        keys, frags = self._after_compile(debug_info, debug_info.looptoken.number)
-        self._store_trace(keys, frags)
-
- 
+        self._after_compile(debug_info, debug_info.looptoken.number)
+         
     def after_compile_bridge(self, debug_info):
         from pycket.values import W_Symbol
-        keys,frags = self._after_compile(debug_info,compute_unique_id(debug_info.fail_descr))
-        self._store_trace(keys, frags)
-
-    # def _after_compile(self, debug_info, token, ttype):
-    #     from pycket.values import W_Cons, wrap_list, W_Fixnum, W_Symbol
-    #     from pycket.values_string import W_String
-    #     trace = [W_Cons.make(W_String.make(ttype.variable_name()), W_Fixnum(token))]
-    #     for op in debug_info.operations:
-    #         car = op.getopname()
-    #         cdr = -1
-    #         if car == "label" or car.startswith("guard"):
-    #             cdr = compute_unique_id(op.getdescr())
-    #         trace.append(W_Cons.make(W_String.make(car), W_Fixnum(cdr)))
-    #     return wrap_list(trace)
-
+        self._after_compile(debug_info,compute_unique_id(debug_info.fail_descr))
+       
     def _after_compile(self, debug_info, key):
         from pycket.values import W_Fixnum, wrap_list
         from pycket.values_string import W_String
         frags = []
         keys = []
         current_frag = []
+        guards = []
+        current_guards = []
         current_key = W_Fixnum(key)
         for op in debug_info.operations:
             opname = op.getopname()
             if opname == "label":
                 frags.append(wrap_list(current_frag))
+                guards.append(wrap_list(current_guards))
                 keys.append(current_key)
                 current_frag = []
+                current_guards = []
                 current_key = W_Fixnum(compute_unique_id(op.getdescr()))
+            if opname.startswith("guard"):
+                current_guards.append(W_Fixnum(compute_unique_id(op.getdescr())))
             current_frag.append(W_String.make(opname))
-        return (keys, frags)
+        self._store_trace(keys, frags, guards)
                 
             
             
