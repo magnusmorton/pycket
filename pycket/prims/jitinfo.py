@@ -33,6 +33,18 @@ def get_trace_db(args):
                     return value.defs[w_trace_symbol]
                 else:
                     return w_null
+
+@expose("get-guards")
+@jit.dont_look_inside
+def get_guards(args):
+    w_guard_symbol=W_Symbol.make("guards")
+    if toplevel_holder.toplevel_env.module_env.modules:
+        for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
+            if key.endswith("trace-info.rkt"):
+                if w_guard_symbol in value.defs:
+                    return value.defs[w_guard_symbol]
+                else:
+                    return w_null
                         
 @expose("counters")
 @jit.dont_look_inside

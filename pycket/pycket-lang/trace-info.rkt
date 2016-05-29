@@ -2,7 +2,8 @@
 (require racket/list)
 (provide
  counters
- get-trace-db)
+ get-trace-db
+ get-guards)
 
 ;; returns hash of tuples
 ;; key is loop/label/guard id
@@ -13,9 +14,11 @@
 ;; returns hash of tuples (representing all fragments)
 ;; key is loop/label/guard id
 ;; value is fragment cost
-(define (get-trace-db symbol)
+(define (get-trace-db)
   (void))
 
+(define (get-guards)
+  (void))
 
 ;; register another JIT hook
 ;; callback should take one argument
