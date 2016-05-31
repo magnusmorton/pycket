@@ -9,16 +9,22 @@
 ;; key is loop/label/guard id
 ;; tuple contains counter value and type (type may be removed at some point)
 (define (counters)
-  (void))
+  #hash((0 . 1000)
+        (1 . 100)
+        (32134 . 6700)))
 
 ;; returns hash of tuples (representing all fragments)
 ;; key is loop/label/guard id
 ;; value is fragment cost
 (define (get-trace-db)
-  (void))
+  #hash((0 . ("label" "int_add" "int_sub" "int_ge" "guard_overflow" "jump"))
+        (1 . ("label" "new" "new_with_vtable" "float_add" "int_ge" "guard_false"))
+        (32134 . ("label" "new" "new" "newstr" "guard_exception" "getfield_gc" "getfield_gc" "setfield_gc" "guard_overflow" "jump"))))
 
 (define (get-guards)
-  (void))
+  #hash((0 . ((1 . 4)))
+        (1 . ())
+        (32134 . ((123545 . 4) (12156 . 8)))))
 
 ;; register another JIT hook
 ;; callback should take one argument
