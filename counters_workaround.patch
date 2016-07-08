@@ -1,6 +1,6 @@
 diff -r 80ef432a32d9 rpython/jit/metainterp/compile.py
 --- a/rpython/jit/metainterp/compile.py	Mon May 16 20:39:00 2016 +0200
-+++ b/rpython/jit/metainterp/compile.py	Sat May 21 23:30:59 2016 +0100
++++ b/rpython/jit/metainterp/compile.py	Fri Jul 08 15:25:37 2016 +0100
 @@ -481,7 +481,7 @@
      return metainterp_sd.cpu.compile_loop(inputargs,
                                            operations, looptoken,
@@ -10,3 +10,12 @@ diff -r 80ef432a32d9 rpython/jit/metainterp/compile.py
                                            logger=metainterp_sd.logger_ops)
  
  def do_compile_bridge(metainterp_sd, faildescr, inputargs, operations,
+@@ -490,7 +490,7 @@
+                                         memo=memo)
+     assert isinstance(faildescr, AbstractFailDescr)
+     return metainterp_sd.cpu.compile_bridge(faildescr, inputargs, operations,
+-                                            original_loop_token, log=log,
++                                            original_loop_token, log=True,
+                                             logger=metainterp_sd.logger_ops)
+ 
+ def forget_optimization_info(lst, reset_values=False):
