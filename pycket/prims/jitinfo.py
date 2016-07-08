@@ -1,7 +1,8 @@
 from rpython.rlib import jit, jit_hooks
+from rpython.rlib.jit import Counters
 
 from pycket.prims.expose import expose, default
-from pycket.values import W_Cons, wrap, W_Symbol, w_null, W_Fixnum, wrap_list
+from pycket.values import W_Cons, wrap, W_Symbol, w_null, W_Fixnum, wrap_list, W_Flonum
 from pycket.values_string import W_String
 from pycket.vector import wrap_vector
 from pycket.hash.simple import make_simple_immutable_table, W_EqvImmutableHashTable
@@ -64,3 +65,9 @@ def counters(args):
 
 
 
+
+@expose("backend-time")
+@jit.dont_look_inside
+def backend_time(args):
+    b_time = jit_hooks.stats_get_times_value(None, Counters.BACKEND)
+    return W_Flonum(b_time)
