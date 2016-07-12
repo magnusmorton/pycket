@@ -78,7 +78,6 @@ class AJPJitInterface(JitHookInterface):
             for path,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
                 if path.endswith("trace-info.rkt"):
                     if w_symbol not in value.defs:
-                        print "SHOULD ONLY BE SEEN ONCE"
                         value.defs[w_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
                     if w_guard_symbol not in value.defs:
                         value.defs[w_guard_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
@@ -94,7 +93,6 @@ class AJPJitInterface(JitHookInterface):
         self._after_compile(debug_info, debug_info.looptoken.number)
          
     def after_compile_bridge(self, debug_info):
-        print "BRIDGE"
         from pycket.values import W_Symbol
         self._after_compile(debug_info,compute_unique_id(debug_info.fail_descr))
        
@@ -107,7 +105,6 @@ class AJPJitInterface(JitHookInterface):
         guards = []
         current_guards = []
         current_key = W_Fixnum(key)
-        print "key:", key
         for i,op in enumerate(debug_info.operations):
             opname = op.getopname()
             if opname == "label":
@@ -118,7 +115,6 @@ class AJPJitInterface(JitHookInterface):
                 current_guards = []
                 current_key = W_Fixnum(compute_unique_id(op.getdescr()))
             if opname == "jump":
-                print "JUMP"
                 frags.append(wrap_list(current_frag))
                 guards.append(wrap_list(current_guards))
                 keys.append(current_key)
