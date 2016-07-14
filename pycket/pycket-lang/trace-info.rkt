@@ -13,6 +13,11 @@
         (1 . 100)
         (32134 . 6700)))
 
+(define (asm-lengths)
+  #hash((0 . 5345)
+        (1 . 234184)
+        (283478294 . 2834)))
+
 ;; returns hash of tuples (representing all fragments)
 ;; key is loop/label/guard id
 ;; value is fragment cost

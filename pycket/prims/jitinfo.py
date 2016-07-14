@@ -21,6 +21,17 @@ from pycket.cont import NilCont
                 # value.defs[W_Symbol.make(u"silly")].call([],
                         # toplevel_holder.toplevel_env, NilCont())
 
+@expose("asm-lengths")
+@jit.dont_look_inside
+def asm_lengths(args):
+    w_asm_symbol = W_Symbol.make("asm"):
+    if toplevel_holder.toplevel_env.module_env.modules:
+        for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
+            if key.endswith("trace-info.rkt"):
+                if w_trace_symbol in value.defs:
+                    return value.defs[w_asm_symbol]
+                else:
+                    return w_null
 
 @expose("get-trace-db")
 @jit.dont_look_inside

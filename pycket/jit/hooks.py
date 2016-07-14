@@ -66,23 +66,30 @@ class FunctionJitInterface(JitHookInterface):
 
 class AJPJitInterface(JitHookInterface):
 
-    def _store_trace(self,keys, frags, guards):
+    def _store_trace(self,keys, frags, guards, w_key, w_asmlen):
         from pycket.values import w_null, W_Cons, W_Fixnum, W_Symbol
         from pycket.hash.simple import make_simple_mutable_table, W_EqvMutableHashTable
         from pycket.cont import NilCont
         w_symbol = W_Symbol.make("traces")
         w_guard_symbol = W_Symbol.make("guards")
+        w_asm_symbol = W_Symbol.make("asm")
         env = toplevel_holder.toplevel_env
         if toplevel_holder.toplevel_env.module_env.modules:
             #TODO: Improve performance
             for path,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
                 if path.endswith("trace-info.rkt"):
+                    print path
                     if w_symbol not in value.defs:
                         value.defs[w_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
                     if w_guard_symbol not in value.defs:
                         value.defs[w_guard_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
+                    if w_asm_symbol not in value.defs:
+                        value.defs[w_asm_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
+                    
                     w_traces = value.defs[w_symbol]
                     w_guards = value.defs[w_guard_symbol]
+                    w_asmlens = value.defs[w_asm_symbol]
+                    w_asmlens.hash_set(w_key, w_asmlen, toplevel_holder.toplevel_env, NilCont())
                     for i, key in enumerate(keys):
                         w_traces.hash_set(key, frags[i], toplevel_holder.toplevel_env, NilCont())
                         w_guards.hash_set(key, guards[i], toplevel_holder.toplevel_env, NilCont())
@@ -124,7 +131,7 @@ class AJPJitInterface(JitHookInterface):
             if opname.startswith("guard"):
                 current_guards.append(W_Cons.make(W_Fixnum(compute_unique_id(op.getdescr())), W_Fixnum(i)))
             current_frag.append(W_String.make(opname))
-        self._store_trace(keys, frags, guards)
+        self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asmlen))
                 
             
             
