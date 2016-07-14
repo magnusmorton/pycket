@@ -24,7 +24,7 @@ from pycket.cont import NilCont
 @expose("asm-lengths")
 @jit.dont_look_inside
 def asm_lengths(args):
-    w_asm_symbol = W_Symbol.make("asm"):
+    w_asm_symbol = W_Symbol.make("asm")
     if toplevel_holder.toplevel_env.module_env.modules:
         for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
             if key.endswith("trace-info.rkt"):
