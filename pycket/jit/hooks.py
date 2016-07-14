@@ -131,7 +131,7 @@ class AJPJitInterface(JitHookInterface):
             if opname.startswith("guard"):
                 current_guards.append(W_Cons.make(W_Fixnum(compute_unique_id(op.getdescr())), W_Fixnum(i)))
             current_frag.append(W_String.make(opname))
-        self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asmlen))
+        self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asminfo.asmlen))
                 
             
             
