@@ -28,7 +28,7 @@ def asm_lengths(args):
     if toplevel_holder.toplevel_env.module_env.modules:
         for key,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
             if key.endswith("trace-info.rkt"):
-                if w_trace_symbol in value.defs:
+                if w_asm_symbol in value.defs:
                     return value.defs[w_asm_symbol]
                 else:
                     return w_null
