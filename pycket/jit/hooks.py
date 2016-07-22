@@ -78,7 +78,6 @@ class AJPJitInterface(JitHookInterface):
             #TODO: Improve performance
             for path,value in toplevel_holder.toplevel_env.module_env.modules.iteritems():
                 if path.endswith("trace-info.rkt"):
-                    print path
                     if w_symbol not in value.defs:
                         value.defs[w_symbol] = make_simple_mutable_table(W_EqvMutableHashTable)
                     if w_guard_symbol not in value.defs:
