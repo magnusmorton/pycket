@@ -103,7 +103,7 @@ class AJPJitInterface(JitHookInterface):
         self._after_compile(debug_info,compute_unique_id(debug_info.fail_descr))
        
     def _after_compile(self, debug_info, key):
-        from pycket.values import W_Fixnum, wrap_list, W_Cons
+        from pycket.values import W_Fixnum, wrap_list, W_Cons, W_Character
         from pycket.values_string import W_String
         frags = []
         keys = []
@@ -129,7 +129,7 @@ class AJPJitInterface(JitHookInterface):
                 current_key = W_Fixnum(compute_unique_id(op.getdescr()))
             if opname.startswith("guard"):
                 current_guards.append(W_Cons.make(W_Fixnum(compute_unique_id(op.getdescr())), W_Fixnum(i)))
-            current_frag.append(W_String.make(opname))
+            current_frag.append(W_Character(opname[0]))
         self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asminfo.asmlen))
                 
             
