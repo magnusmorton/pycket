@@ -120,15 +120,17 @@ class AJPJitInterface(JitHookInterface):
                 current_frag = []
                 current_guards = []
                 current_key = W_Fixnum(compute_unique_id(op.getdescr()))
-            if opname == "jump":
+            elif opname == "jump":
                 frags.append(wrap_list(current_frag))
                 guards.append(wrap_list(current_guards))
                 keys.append(current_key)
                 current_frag = []
                 current_guards = []
                 current_key = W_Fixnum(compute_unique_id(op.getdescr()))
-            if opname.startswith("guard"):
+            elif opname.startswith("guard"):
                 current_guards.append(W_Cons.make(W_Fixnum(compute_unique_id(op.getdescr())), W_Fixnum(i)))
+            elif opname.startswith("debug"):
+                continue
             current_frag.append(W_Character(opname[0]))
         self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asminfo.asmlen))
                 
