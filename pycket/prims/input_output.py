@@ -7,66 +7,78 @@ from rpython.rlib.rstring     import (ParseStringError,
         ParseStringOverflowError, StringBuilder)
 from rpython.rlib.rarithmetic import string_to_int, intmask
 from rpython.rlib import runicode
+from rpython.rlib.objectmodel import newlist_hint
 
 from pycket.cont         import continuation, loop_label, call_cont
+from pycket.base         import W_ProtoObject
 from pycket              import values
 from pycket              import values_parameter
 from pycket              import values_struct
 from pycket              import values_string
 from pycket.error        import SchemeException
 from pycket.prims.expose import default, expose, expose_val, procedure
+
+from sys import platform
+
 import os
 
-w_quote_symbol = values.W_Symbol.make("quote")
-w_quasiquote_symbol = values.W_Symbol.make("quasiquote")
-w_unquote_symbol = values.W_Symbol.make("unquote")
-w_unquote_splicing_symbol = values.W_Symbol.make("unquote-splicing")
-
-w_quote_syntax_symbol = values.W_Symbol.make("quote-syntax")
-w_quasiquote_syntax_symbol = values.W_Symbol.make("quasisyntax")
-w_unquote_syntax_symbol = values.W_Symbol.make("unsyntax")
-w_unquote_syntax_splicing_symbol = values.W_Symbol.make("unsyntax-splicing")
-
-class Token(object): pass
-
-class ValueToken(Token):
-    def __init__(self, v):
-        assert isinstance(v, values.W_Object)
-        self.val = v
+class Token(W_ProtoObject):
+    _attrs_ = []
 
 class SpecialToken(Token):
-    def __init__(self, s, con):
-        self.str = s
+    _attrs_ = ['con']
+
+    def __init__(self, con):
         self.con = con
+
     def finish(self, val):
         return values.W_Cons.make(self.con, values.W_Cons.make(val, values.w_null))
 
-class NumberToken(ValueToken): pass
-class StringToken(ValueToken): pass
-class SymbolToken(ValueToken): pass
-class BooleanToken(ValueToken): pass
-class CharToken(ValueToken): pass
-class EOFToken(ValueToken): pass
-
-
 class DelimToken(Token):
+    _attrs_ = ['str']
+
     def __init__(self, s):
         self.str = s
 
-class LParenToken(DelimToken): pass
-class RParenToken(DelimToken): pass
-class DotToken(DelimToken): pass
+class LParenToken(DelimToken):
+    _attrs_ = []
+
+class RParenToken(DelimToken):
+    _attrs_ = []
+
+class DotToken(DelimToken):
+    _attrs_ = []
+
+# Some prebuilt tokens
+
+def make_special_tokens(*names):
+    for name in names:
+        symbol = values.W_Symbol.make(name)
+        token = SpecialToken(symbol)
+        idname = name.replace("-", "_")
+        globals()[idname + "_token"] = token
+
+make_special_tokens(
+    "quote",
+    "quasiquote",
+    "unquote",
+    "unquote-splicing",
+    "quote-syntax",
+    "quasisyntax",
+    "unsyntax",
+    "unsyntax-splicing")
+
+dot_token = DotToken('.')
 
 allowed_char = "!?.-_:=*$%<>+^@&~/"
 
 def idchar(c):
     c = c[0] # tell the annotator it's really a single char
-    if c.isalnum() or (c in allowed_char):
-        return True
-    return False
+    return c.isalnum() or c in allowed_char
 
 def read_number_or_id(f, init):
-    sofar = [init]
+    sofar = StringBuilder(64)
+    sofar.append(init)
     while True:
         c = f.peek()
         if c == "":
@@ -77,43 +89,50 @@ def read_number_or_id(f, init):
             sofar.append(v)
         else:
             break
-    got = "".join(sofar)
+    got = sofar.build()
     try:
-        return NumberToken(values.W_Fixnum.make(string_to_int(got)))
+        val = string_to_int(got)
+        return values.W_Fixnum.make_or_interned(val)
     except ParseStringOverflowError:
         val = rbigint.fromdecimalstr(got)
-        return NumberToken(values.W_Bignum(val))
+        return values.W_Bignum(val)
     except ParseStringError:
         try:
-            return NumberToken(values.W_Flonum.make(float(got)))
+            return values.W_Flonum(float(got))
         except:
-            return SymbolToken(values.W_Symbol.make(got))
+            return values.W_Symbol.make(got)
 
 # FIXME: replace with a string builder
 # FIXME: unicode
 def read_string(f):
-    buf = []
+    buf = StringBuilder(64)
+    isascii = True
     while True:
-        c = f.read(1)
+        c = f.read(1)[0]
         if c == '"':
-            return values_string.W_String.fromstr_utf8("".join(buf))
-        elif c == "\\":
-            n = f.read(1)
-            if n in ['"', "\\"]:
+            string = buf.build()
+            if isascii:
+                return values_string.W_String.fromascii(string)
+            return values_string.W_String.fromstr_utf8(string)
+        elif c == '\\':
+            n = f.read(1)[0]
+            if n == '"' or n == '\\':
                 c = n
-            elif n == "n":
-                c = "\n"
-            elif n == "t":
-                c = "\t"
+            elif n == 'n':
+                c = '\n'
+            elif n == 't':
+                c = '\t'
             else:
                 raise SchemeException("read: bad escape character in string: %s"%n)
+        else:
+            isascii &= ord(c) < 128
         buf.append(c)
 
 def read_token(f):
     while True:
         c = f.read(1) # FIXME: unicode
         if not c:
-            return EOFToken(values.eof_object)
+            return values.eof_object
         if c == ";":
             f.readline()
             continue
@@ -125,41 +144,41 @@ def read_token(f):
             return RParenToken(c)
         if c == "\"":
             v = read_string(f)
-            return ValueToken(v)
+            return v
         if c == ".":
             p = f.peek()
             if p in [" ", "\n", "\t"]:
-                return DotToken(c)
+                return dot_token
             return read_number_or_id(f, c)
         if c == "'":
-            return SpecialToken(c, w_quote_symbol)
+            return quote_token
         if c ==  "`":
-            return SpecialToken(c, w_quasiquote_symbol)
+            return quasiquote_token
         if c == ",":
             p = f.peek()
             if p == "@":
                 p = f.read(1)
-                return SpecialToken(c + p, w_unquote_splicing_symbol)
+                return unquote_splicing_token
             else:
-                return SpecialToken(c, w_unquote_symbol)
+                return unquote_token
         if idchar(c):
             return read_number_or_id(f, c)
         if c == "#":
             c2 = f.read(1)
             if c2 == "'":
-                return SpecialToken(c + c2, w_quote_syntax_symbol)
+                return quote_syntax_token
             if c2 == "`":
-                return SpecialToken(c + c2, w_quasiquote_syntax_symbol)
+                return quasisyntax_token
             if c2 == ",":
                 p = f.peek()
                 if p == "@":
                     p = f.read(1)
-                    return SpecialToken(c + c2, w_unquote_syntax_splicing_symbol)
-                return SpecialToken(c + c2, w_unquote_syntax_symbol)
+                    return unsyntax_splicing_token
+                return unsyntax_token
             if c2 == "t":
-                return BooleanToken(values.w_true)
+                return values.w_true
             if c2 == "f":
-                return BooleanToken(values.w_false)
+                return values.w_false
             if c2 in ["(", "[", "{"]:
                 return LParenToken("#" + c2)
             if c2 == "\\":
@@ -167,7 +186,7 @@ def read_token(f):
                 if not s:
                     raise SchemeException("unexpected end of file")
                 c = ord(s[0]) # XXX deal with unicode
-                return CharToken(values.W_Character.make(unichr(c)))
+                return values.W_Character(unichr(c))
             raise SchemeException("bad token in read: %s" % c2)
         raise SchemeException("bad token in read: %s" % c)
 
@@ -189,9 +208,26 @@ def get_input_port(port, env, cont):
 def read_stream_cont(env, cont, _vals):
     from pycket.interpreter import check_one_val, return_value
     port = check_one_val(_vals)
-    v = read_stream(port)
-    return return_value(v, env, cont)
+    rt = current_readtable_param.get(cont)
+    if rt is values.w_false:
+        rt = None
+    else:
+        assert isinstance(rt, values.W_ReadTable)
+    return read_stream_rt(port, rt, env, cont)
 
+def read_stream_rt(port, rt, env, cont):
+    from pycket.interpreter import return_value
+    if rt is not None:
+        c = port.peek()
+        c = c[0]
+        if c == rt.key.value:
+            port.read(1) # since we peeked
+            args = [rt.key, port, values.w_false, values.w_false, values.w_false, values.w_false]
+            return rt.action.call(args, env, cont)
+    # ignore the possibility that the readtable is relevant in the future
+    return return_value(read_stream(port), env, cont)
+
+@jit.dont_look_inside
 def read_stream(stream):
     next_token = read_token(stream)
     if isinstance(next_token, SpecialToken):
@@ -199,57 +235,54 @@ def read_stream(stream):
         return next_token.finish(v)
     if isinstance(next_token, DelimToken):
         if not isinstance(next_token, LParenToken):
-            raise SchemeException("read: unexpected %s"%next_token.str)
-        v = read_list(stream, values.w_null, next_token.str)
+            raise SchemeException("read: unexpected %s" % next_token.str)
+        v = read_list(stream, next_token.str)
         return v
     else:
-        return next_token.val
-
-# assumes a proper list
-def reverse(w_l, acc=values.w_null):
-    while isinstance(w_l, values.W_Cons):
-        val, w_l = w_l.car(), w_l.cdr()
-        acc = values.W_Cons.make(val, acc)
-    return acc
+        assert isinstance(next_token, values.W_Object)
+        return next_token
 
 def check_matches(s1, s2):
-    if s1 == "(":
-        assert s2 == ")"
-    if s1 == "[":
-        assert s2 == "]"
-    if s1 == "{":
-        assert s2 == "}"
+    assert (s1 == "(" and s2 == ")" or
+            s1 == "[" and s2 == "]" or
+            s1 == "{" and s2 == "}")
 
-def read_list(stream, so_far, end):
+def to_improper(l, curr, start=0):
+    """
+    This is the same code as values.to_improper but is needed to type check properly
+    as values.to_improper only works for immutable lists.
+    """
+    assert start >= 0
+    for i in range(len(l) - 1, start - 1, -1):
+        curr = values.W_Cons.make(l[i], curr)
+    return curr
+
+def read_list(stream, end):
+    so_far = newlist_hint(8)
     while True:
         next_token = read_token(stream)
-        if isinstance(next_token, DotToken):
+        if next_token is dot_token:
             last = read_stream(stream)
             close = read_token(stream)
             if isinstance(close, RParenToken):
                 check_matches(end, close.str)
-                return reverse(so_far, acc=last)
+                return to_improper(so_far, last)
             else:
                 raise SchemeException("read: illegal use of `.`")
         elif isinstance(next_token, RParenToken):
             check_matches(end, next_token.str)
-            return reverse(so_far)
+            return to_improper(so_far, values.w_null)
         elif isinstance(next_token, LParenToken):
-            v = read_list(stream, values.w_null, next_token.str)
+            v = read_list(stream, next_token.str)
         elif isinstance(next_token, SpecialToken):
             arg = read_stream(stream)
             v = next_token.finish(arg)
         else:
-            assert isinstance(next_token, ValueToken)
-            v = next_token.val
-        so_far = values.W_Cons.make(v, so_far)
+            assert isinstance(next_token, values.W_Object)
+            v = next_token
+        so_far.append(v)
 
-
-linefeed_sym        = values.W_Symbol.make("linefeed")
-return_sym          = values.W_Symbol.make("return")
-return_linefeed_sym = values.W_Symbol.make("return-linefeed")
-any_sym             = values.W_Symbol.make("any")
-any_one_sym         = values.W_Symbol.make("any-one")
+linefeed_sym = values.W_Symbol.make("linefeed")
 
 @continuation
 def do_read_line(mode, as_bytes, env, cont, _vals):
@@ -285,11 +318,19 @@ def read_bytes_line(w_port, w_mode, env, cont):
     return get_input_port(w_port, env, cont)
 
 
+@continuation
+def do_read_one_cont(as_bytes, peek, env, cont, _vals):
+    from pycket.interpreter import check_one_val
+    w_port = check_one_val(_vals)
+    return do_read_one(w_port, as_bytes, peek, env, cont)
+
+def utf8_code_length(i):
+    if i < 0x80:
+        return 1
+    return ord(runicode._utf8_code_length[i - 0x80])
+
 def do_read_one(w_port, as_bytes, peek, env, cont):
     from pycket.interpreter import return_value
-    if w_port is None:
-        w_port = current_in_param.get(cont)
-    assert isinstance(w_port, values.W_InputPort)
     if peek:
         c = w_port.peek()
     else:
@@ -303,30 +344,38 @@ def do_read_one(w_port, as_bytes, peek, env, cont):
         return return_value(values.W_Fixnum(i), env, cont)
     else:
         # hmpf, poking around in internals
-        needed = runicode.utf8_code_length[i]
+        needed = utf8_code_length(i)
         if peek:
             old = w_port.tell()
             c = w_port.read(needed)
             w_port.seek(old)
-        else:
+        elif needed > 1:
             c += w_port.read(needed - 1)
         c = c.decode("utf-8")
         assert len(c) == 1
         return return_value(values.W_Character(c[0]), env, cont)
 
-@expose("read-char", [default(values.W_InputPort, None)], simple=False)
+@expose("read-char", [default(values.W_Object, None)], simple=False)
 def read_char(w_port, env, cont):
     try:
-        return do_read_one(w_port, False, False, env, cont)
+        cont = do_read_one_cont(False, False, env, cont)
+        return get_input_port(w_port, env, cont)
     except UnicodeDecodeError:
         raise SchemeException("read-char: string is not a well-formed UTF-8 encoding")
 
-@expose("read-byte", [default(values.W_InputPort, None)], simple=False)
+@expose("read-byte", [default(values.W_Object, None)], simple=False)
 def read_byte(w_port, env, cont):
     try:
-        return do_read_one(w_port, True, False, env, cont)
+        cont = do_read_one_cont(True, False, env, cont)
+        return get_input_port(w_port, env, cont)
     except UnicodeDecodeError:
         raise SchemeException("read-byte: string is not a well-formed UTF-8 encoding")
+
+@continuation
+def do_peek_cont(as_bytes, skip, env, cont, _vals):
+    from pycket.interpreter import check_one_val
+    w_port = check_one_val(_vals)
+    return do_peek(w_port, as_bytes, skip, env, cont)
 
 def do_peek(w_port, as_bytes, skip, env, cont):
     if skip == 0:
@@ -339,21 +388,23 @@ def do_peek(w_port, as_bytes, skip, env, cont):
         w_port.seek(old)
         return ret
 
-@expose("peek-char", [default(values.W_InputPort, None),
+@expose("peek-char", [default(values.W_Object, None),
                       default(values.W_Fixnum, values.W_Fixnum.ZERO)],
                     simple=False)
 def peek_char(w_port, w_skip, env, cont):
     try:
-        return do_peek(w_port, False, w_skip.value, env, cont)
+        cont = do_peek_cont(False, w_skip.value, env, cont)
+        return get_input_port(w_port, env, cont)
     except UnicodeDecodeError:
         raise SchemeException("peek-char: string is not a well-formed UTF-8 encoding")
 
-@expose("peek-byte", [default(values.W_InputPort, None),
+@expose("peek-byte", [default(values.W_Object, None),
                       default(values.W_Fixnum, values.W_Fixnum.ZERO)],
                     simple=False)
 def peek_byte(w_port, w_skip, env, cont):
     try:
-        return do_peek(w_port, True, w_skip.value, env, cont)
+        cont = do_peek_cont(True, w_skip.value, env, cont)
+        return get_input_port(w_port, env, cont)
     except UnicodeDecodeError:
         raise SchemeException("peek-byte: string is not a well-formed UTF-8 encoding")
 
@@ -380,15 +431,22 @@ def open_output_file(path, mode, exists):
     m = "w" if mode is w_text_sym else "wb"
     return open_outfile(path, m)
 
-@expose("close-input-port", [values.W_InputPort])
-def close_input_port(port):
-    port.close()
-    return values.w_void
+@expose("close-input-port", [values.W_Object], simple=False)
+def close_input_port(port, env, cont):
+    cont = close_port_cont(env, cont)
+    return get_input_port(port, env, cont)
 
-@expose("close-output-port", [values.W_OutputPort])
-def close_output_port(port):
+@continuation
+def close_port_cont(env, cont, _vals):
+    from pycket.interpreter import check_one_val
+    port = check_one_val(_vals)
     port.close()
-    return values.w_void
+    return return_void(env, cont)
+
+@expose("close-output-port", [values.W_Object], simple=False)
+def close_output_port(port, env, cont):
+    cont = close_port_cont(env, cont)
+    return get_output_port(port, env, cont)
 
 @expose("port-closed?", [values.W_Port])
 def port_closedp(p):
@@ -428,7 +486,7 @@ def dir_list(w_str):
 UP = values.W_Symbol.make("up")
 SAME = values.W_Symbol.make("same")
 RELATIVE = values.W_Symbol.make("relative")
-SEP = values.W_Path(os.sep)
+ROOT = SEP = values.W_Path(os.sep)
 
 def _explode_element(s):
     if not s:
@@ -446,30 +504,65 @@ def explode_path(w_path):
     parts = [_explode_element(p) for p in path.split(sep)]
     return values.to_list(parts)
 
+def _strip_path_seps(path):
+    i = len(path)
+    while i > 0 and path[i-1] == os.path.sep:
+        i -= 1
+    assert i >= 0
+    return path[:i]
+
 def _dirname(path):
-    components = path.split(os.path.sep)
-    return os.path.sep.join(components[:-1])
+    path = _strip_path_seps(path)
+    components = path.split(os.path.sep)[:-1]
+    if components == ['']:
+        return os.path.sep
+    return os.path.sep.join(components)
 
 def _basename(path):
+    path = _strip_path_seps(path)
     components = path.split(os.path.sep)
     return components[-1]
+
+def _must_be_dir(path):
+    return values.W_Bool.make(bool(path) and path[-1] == os.path.sep)
+
+def _split_path(path):
+    dirname  = _dirname(path)
+    basename = _basename(path)
+    name = _explode_element(basename)
+    if dirname == os.path.sep:
+        base = values.W_Path(os.path.sep)
+        must_be_dir = _must_be_dir(path)
+    elif dirname == '' and basename == '':
+        base = values.w_false
+        must_be_dir = values.w_true
+    elif dirname == '':
+        if basename == '':
+            base = values.w_false
+        else:
+            base = RELATIVE
+        if name is UP or name is SAME:
+            must_be_dir = values.w_true
+        else:
+            must_be_dir = _must_be_dir(path)
+    elif basename == '':
+        base = RELATIVE
+        second_name = _explode_element(dirname)
+        if second_name is UP or second_name is SAME:
+            name = second_name
+        else:
+            name = values.W_Path(dirname + os.path.sep)
+        must_be_dir = values.w_true
+    else:
+        base = values.W_Path(dirname + os.path.sep)
+        must_be_dir = values.w_false
+    return base, name, must_be_dir
 
 @expose("split-path", [values.W_Object], simple=False)
 def split_path(w_path, env, cont):
     from pycket.interpreter import return_multi_vals
     path = extract_path(w_path)
-    dirname  = _dirname(path)
-    basename = _basename(path)
-    name = _explode_element(basename)
-    if dirname == os.path.sep:
-        base = values.w_false
-        must_be_dir = values.w_false
-    elif name is UP or name is SAME:
-        base = RELATIVE
-        must_be_dir = values.w_true
-    else:
-        base = values.W_Path(dirname + os.path.sep)
-        must_be_dir = values.w_false
+    base, name, must_be_dir = _split_path(path)
     result = values.Values.make([base, name, must_be_dir])
     return return_multi_vals(result, env, cont)
 
@@ -477,6 +570,8 @@ def split_path(w_path, env, cont):
 def build_path(args):
     # XXX Does not check that we are joining absolute paths
     # Sorry again Windows
+    if not args:
+        raise SchemeException("build-path: expected at least 1 argument")
     result = [None] * len(args)
     for i, s in enumerate(args):
         if s is UP:
@@ -487,13 +582,22 @@ def build_path(args):
             part = extract_path(s)
         if not part:
             raise SchemeException("build-path: path element is empty")
+        if part == os.path.sep:
+            part = ""
         result[i] = part
-    return values.W_Path("/".join(result))
+    path = os.path.sep.join(result)
+    if not path:
+        return ROOT
+    return values.W_Path(path)
 
 @expose("simplify-path", [values.W_Object, default(values.W_Bool, values.w_false)])
 def simplify_path(path, use_filesystem):
     path_str = extract_path(path)
     return values.W_Path(path_str)
+
+@expose("path<?", [values.W_Path, values.W_Path])
+def path_less_than(p1, p2):
+    return values.W_Bool.make(p1.path < p2.path)
 
 @expose("use-user-specific-search-paths", [])
 def use_user_specific_search_paths():
@@ -506,16 +610,27 @@ def path_to_path_complete_path(path, _base):
     else:
         base = extract_path(_base)
     p = extract_path(path)
-    if p and p[0] == '/':
-        return path
-    return values.W_Path(base + '/' + p)
+    if p and p[0] == os.path.sep:
+        return values.W_Path(p)
+    return values.W_Path(base + os.path.sep + p)
 
-@expose("path-for-some-system?", [values.W_Object])
-def path_for_some_system(path):
+@expose("path-convention-type", [values.W_Path])
+def path_convention_type(path):
+    from pycket.prims.general import detect_platform, w_macosx_sym, w_unix_sym
+    platform = detect_platform()
+    if platform is w_macosx_sym:
+        platform = w_unix_sym
+    return platform
+
+def _path_for_some_systemp(path):
     # XXX Really only handles UNIX paths
     # https://github.com/racket/racket/blob/827fc4559879c73d46268fc72f95efe0009ff905/racket/src/racket/include/scheme.h#L493
     # This seems to be the closest implementation we can achieve.
-    return values.W_Bool.make(isinstance(path, values.W_Path))
+    return isinstance(path, values.W_Path)
+
+@expose("path-for-some-system?", [values.W_Object])
+def path_for_some_systemp(path):
+    return values.W_Bool.make(_path_for_some_systemp(path))
 
 @expose("relative-path?", [values.W_Object])
 def relative_path(obj):
@@ -529,10 +644,68 @@ def absolute_path(obj):
 
 @expose("resolve-path", [values.W_Object])
 def resolve_path(obj):
-    if not isinstance(obj, values_string.W_String) and not isinstance(obj, values.W_Path):
+    if (not isinstance(obj, values_string.W_String) and
+        not isinstance(obj, values.W_Path)):
         raise SchemeException("resolve-path: expected path-string")
     str = extract_path(obj)
     return values.W_Path(os.path.normpath(str))
+
+@expose("path-string?", [values.W_Object])
+def path_stringp(v):
+    # FIXME: handle zeros in string
+    return values.W_Bool.make(
+        isinstance(v, values_string.W_String) or isinstance(v, values.W_Path))
+
+@expose("complete-path?", [values.W_Object])
+def complete_path(v):
+    # FIXME: stub
+    return values.w_true
+
+@expose("path->string", [values.W_Path])
+def path2string(p):
+    return values_string.W_String.fromstr_utf8(p.path)
+
+@expose("path->bytes", [values.W_Path])
+def path2bytes(p):
+    return values.W_Bytes.from_string(p.path)
+
+@expose("cleanse-path", [values.W_Object])
+def cleanse_path(p):
+    if isinstance(p, values_string.W_String):
+        return values.W_Path(p.as_str_ascii())
+    if isinstance(p, values.W_Path):
+        return p
+    raise SchemeException("cleanse-path expects string or path")
+
+def _path_elementp(p):
+    """
+    see path.rkt
+    (define (path-element? path)
+      (and (path-for-some-system? path)
+           (let-values ([(base name d?) (split-path path)])
+             (and (eq? base 'relative)
+                  (path-for-some-system? name)))))
+    """
+    if not _path_for_some_systemp(p):
+        return False
+    path = extract_path(p)
+    base, name, _ = _split_path(path)
+    return base is RELATIVE and _path_for_some_systemp(name)
+
+@expose("path-element->string", [values.W_Object])
+def path_element2string(p):
+    if not _path_elementp(p):
+        raise SchemeException("path-element->string expects path")
+
+    path = extract_path(p)
+    return values_string.W_String.fromstr_utf8(path)
+
+@expose("path-element->bytes", [values.W_Object])
+def path_element2bytes(p):
+    if not _path_elementp(p):
+        raise SchemeException("path-element->string expects path")
+    path = extract_path(p)
+    return values.W_Bytes.from_string(path)
 
 @continuation
 def close_cont(port, env, cont, vals):
@@ -542,7 +715,7 @@ def close_cont(port, env, cont, vals):
 
 def open_infile(w_str, mode):
     s = extract_path(w_str)
-    return values.W_FileInputPort(sio.open_file_as_stream(s, mode=mode))
+    return values.W_FileInputPort(sio.open_file_as_stream(s, mode=mode, buffering=2**21))
 
 def open_outfile(w_str, mode):
     s = extract_path(w_str)
@@ -639,7 +812,7 @@ def file_position(args):
 @expose("display", [values.W_Object, default(values.W_OutputPort, None)], simple=False)
 def display(datum, out, env, cont):
     if isinstance(datum, values.W_Bytes):
-        bytes = datum.value
+        bytes = datum.as_bytes_list()
         port = current_out_param.get(cont) if out is None else out
         write_bytes_avail(bytes, port , 0, len(bytes))
         return return_void(env, cont)
@@ -658,12 +831,20 @@ def _print(o, p, env, cont):
     return do_print(o.tostring(), p, env, cont)
 
 def do_print(str, port, env, cont):
-    if port is None:
-        port = current_out_param.get(cont)
+    cont = do_print_cont(str, env, cont)
+    return get_output_port(port, env, cont)
+
+@continuation
+def do_print_cont(str, env, cont, _vals):
+    from pycket.interpreter import check_one_val, return_value
+    port = check_one_val(_vals)
+    assert isinstance(port, values.W_OutputPort)
     port.write(str)
     return return_void(env, cont)
 
-@jit.unroll_safe
+# XXX: Might need to be careful with this heuristic due to mutable strings, but
+# mutable strings are unlikely to be constant, as they are not interned.
+@jit.look_inside_iff(lambda form, vals, name: jit.isconstant(form))
 def format(form, vals, name):
     fmt = form.as_str_utf8() # XXX for now
     i = 0
@@ -671,30 +852,28 @@ def format(form, vals, name):
     result = []
     len_fmt = len(fmt)
     while True:
-        i0 = i
+        start = i
         while i < len_fmt:
             if fmt[i] == '~':
                 break
             i += 1
         else:
             # not left via break, so we're done
-            result.append(fmt[i0:len_fmt])
+            result.append(fmt[start:len_fmt])
             break
-        result.append(fmt[i0:i])
+        result.append(fmt[start:i])
         if i+1 == len_fmt:
             raise SchemeException(name + ": bad format string")
         s = fmt[i+1]
         if (s == 'a' or # turns into switch
-                s == 'A' or
-                s == 's' or
-                s == 'S' or
-                s == 'v' or
-                s == 'V' or
-                s == 'e' or
-                s == 'E' or
-                s == '.'):
-            # print a value
-            # FIXME: different format chars
+            s == 'A' or
+            s == 's' or
+            s == 'S' or
+            s == 'v' or
+            s == 'V' or
+            s == 'e' or
+            s == 'E' or
+            s == '.'):
             if j >= len(vals):
                 raise SchemeException(name + ": not enough arguments for format string")
             result.append(vals[j].tostring())
@@ -729,7 +908,6 @@ def eprintf(args, env, cont):
     return do_print(format(fmt, args[1:], "eprintf"), current_error_param.get(cont), env, cont)
 
 @expose("format")
-@jit.look_inside_iff(lambda args: jit.isconstant(args[0]))
 def do_format(args):
     if len(args) == 0:
         raise SchemeException("format: expects format string")
@@ -890,28 +1068,30 @@ def read_bytes_avail_bang(w_bstr, w_port, w_start, w_end, env, cont):
     if w_port is None:
         w_port = current_in_param.get(cont)
     start = w_start.value
-    stop = len(w_bstr.value) if w_end is None else w_end.value
+    bytes = w_bstr.as_bytes_list()
+    stop = len(bytes) if w_end is None else w_end.value
     if stop == start:
         return return_value(values.W_Fixnum.ZERO, env, cont)
 
 
     # FIXME: assert something on indices
-    assert start >= 0 and stop <= len(w_bstr.value)
+    assert start >= 0 and stop <= len(bytes)
     n = stop - start
 
     res = w_port.read(n)
     reslen = len(res)
 
     # shortcut without allocation when complete replace
-    if start == 0 and stop == len(w_bstr.value) and reslen == n:
-        w_bstr.value = list(res)
-        return return_value(values.W_Fixnum(reslen), env, cont)
+    if isinstance(w_bstr, values.W_MutableBytes):
+        if start == 0 and stop == len(bytes) and reslen == n:
+            w_bstr.value = list(res)
+            return return_value(values.W_Fixnum(reslen), env, cont)
 
     if reslen == 0:
         return return_value(values.eof_object, env, cont)
 
     for i in range(0, reslen):
-        w_bstr.value[start + i] = res[i]
+        bytes[start + i] = res[i]
     return return_value(values.W_Fixnum(reslen), env, cont)
 
 # FIXME: implementation
@@ -980,7 +1160,7 @@ def get_port_from_property(port, env, cont, _vals):
     return return_value(port, env, cont)
 
 @expose("write-byte",
-        [values.W_Fixnum, default(values.W_OutputPort, None)], simple=False)
+        [values.W_Fixnum, default(values.W_Object, None)], simple=False)
 def write_byte(b, out, env, cont):
     s = b.value
     if s < 0 or s > 255:
@@ -988,7 +1168,7 @@ def write_byte(b, out, env, cont):
     return do_print(chr(s), out, env, cont)
 
 @expose("write-char",
-        [values.W_Character, default(values.W_OutputPort, None)], simple=False)
+        [values.W_Character, default(values.W_Object, None)], simple=False)
 def write_char(w_char, w_port, env, cont):
     c = w_char.value
     from rpython.rlib.runicode import unicode_encode_utf_8
@@ -1023,7 +1203,7 @@ def wrap_write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
     # FIXME: custom ports
     if w_port is None:
         w_port = current_out_param.get(cont)
-    bytes = w_bstr.value
+    bytes = w_bstr.as_bytes_list()
     start = 0 if w_start is None else w_start.value
     stop = len(bytes) if w_end is None else w_end.value
     n = write_bytes_avail(bytes, w_port, start, stop)
@@ -1033,6 +1213,18 @@ def wrap_write_bytes_avail(w_bstr, w_port, w_start, w_end, env, cont):
 @expose("custom-write?", [values.W_Object])
 def do_has_custom_write(v):
     return values.w_false
+
+@expose("bytes->path-element", [values.W_Bytes, default(values.W_Symbol, None)])
+def bytes_to_path_element(bytes, path_type):
+    from pycket.prims.general import w_unix_sym, w_windows_sym
+    if path_type is None:
+        path_type = w_windows_sym if platform in ('win32', 'cygwin') else w_unix_sym
+    if path_type not in (w_unix_sym, w_windows_sym):
+        raise SchemeException("bytes->path-element: unknown system type %s" % path_type.tostring())
+    str = bytes.as_str()
+    if os.sep in str:
+        raise SchemeException("bytes->path-element: cannot be converted to a path element %s" % str)
+    return values.W_Path(str)
 
 def shutdown(env):
     # called before the interpreter exits
@@ -1052,6 +1244,8 @@ stdin_port = values.W_FileInputPort(sio.fdopen_as_stream(0, "r"))
 current_out_param = values_parameter.W_Parameter(stdout_port)
 current_error_param = values_parameter.W_Parameter(stderr_port)
 current_in_param = values_parameter.W_Parameter(stdin_port)
+current_readtable_param = values_parameter.W_Parameter(values.w_false)
+expose_val("current-readtable", current_readtable_param)
 
 expose_val("current-output-port", current_out_param)
 expose_val("current-error-port", current_error_param)

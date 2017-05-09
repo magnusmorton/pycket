@@ -5,7 +5,7 @@ from pycket                    import values, values_parameter, values_string
 from pycket.arity              import Arity
 from pycket.cont               import continuation, loop_label, call_cont, Barrier, Cont, NilCont, Prompt
 from pycket.error              import SchemeException
-from pycket.parser_definitions import ArgParser, EndOfInput
+from pycket.argument_parser    import ArgParser, EndOfInput
 from pycket.prims.expose       import default, expose, expose_val, procedure, make_procedure
 from pycket.util               import add_copy_method
 from rpython.rlib              import jit
@@ -50,28 +50,60 @@ def post_build_exception(env, cont, _vals):
 
 def convert_runtime_exception(exn, env, cont):
     from pycket               import values_string
-    from pycket.prims.general import exn_fail
+    from pycket.prims.general import exn_fail, exn_fail_user
     from pycket.values        import W_ContinuationMarkSet
     from pycket.prims.control import raise_exception
     message = values_string.W_String.fromstr_utf8(exn.msg)
     marks   = W_ContinuationMarkSet(cont, values.w_default_continuation_prompt_tag)
     cont    = post_build_exception(env, cont)
-    return exn_fail.constructor.call([message, marks], env, cont)
+    if exn.is_user():
+        return exn_fail_user.constructor.call([message, marks], env, cont)
+    else:
+        return exn_fail.constructor.call([message, marks], env, cont)
 
-@jit.elidable
-def scan_continuation(curr, prompt_tag):
+@jit.unroll_safe
+def scan_continuation(curr, prompt_tag, look_for=None, escape=False):
     """
     Segment a continuation based on a given continuation-prompt-tag.
     The head of the continuation, up to and including the desired continuation
     prompt is reversed (in place), and the tail is returned un-altered.
+
+    The hint value |look_for| is used to determine when the continuation being
+    installed is a prefix of the extant continuation.
+    In this case, installing the continuation is much simpler, as the expensive
+    merge operation needed to find common substructure is the two continuation is
+    not needed.
     """
+    handlers = False
     xs = []
     while isinstance(curr, Cont):
+        if curr is look_for:
+            return None, handlers
+        handlers |= isinstance(curr, DynamicWindValueCont)
         xs.append(curr)
         if isinstance(curr, Prompt) and curr.tag is prompt_tag:
             break
         curr = curr.prev
-    return xs
+        if not escape and not jit.isvirtual(curr):
+            return _scan_continuation(curr, prompt_tag, look_for, xs, handlers)
+    return xs, handlers
+
+@jit.elidable
+def _scan_continuation(curr, prompt_tag, look_for, xs, handlers):
+    """
+    Variant of scan_continuation which is elidable.
+    scan_continuation switchs to using this function when all the virtual
+    continuation frames are exhausted.
+    """
+    while isinstance(curr, Cont):
+        if curr is look_for:
+            return None, handlers
+        handlers |= isinstance(curr, DynamicWindValueCont)
+        xs.append(curr)
+        if isinstance(curr, Prompt) and curr.tag is prompt_tag:
+            break
+        curr = curr.prev
+    return xs, handlers
 
 @jit.elidable
 def find_merge_point(c1, c2):
@@ -96,7 +128,35 @@ def find_merge_point(c1, c2):
         j -= 1
     return r1, r2, unwind, rewind
 
-def install_continuation(cont, prompt_tag, args, env, current_cont, extend=False):
+@jit.elidable
+def find_handlers(cont, target):
+    result = None
+    while cont is not target:
+        assert isinstance(cont, Cont)
+        if isinstance(cont, DynamicWindValueCont):
+            if not result:
+                result = []
+            result.append(cont)
+        cont = cont.prev
+    return result
+
+@jit.unroll_safe
+def install_continuation_fast_path(current_cont, args, has_handlers, env, cont):
+    from pycket.interpreter import return_multi_vals, return_void
+
+    if not has_handlers:
+        args = values.Values.make(args)
+        return return_multi_vals(args, env, cont)
+
+    unwind = find_handlers(current_cont, cont)
+    cont = return_args_cont(args, env, cont)
+    unwind = [x for x in reversed(unwind)]
+    cont = do_unwind_cont(unwind, env, cont)
+    return return_void(env, cont)
+
+
+@jit.unroll_safe
+def install_continuation(cont, prompt_tag, args, env, current_cont, extend=False, escape=False):
     from pycket.interpreter import return_multi_vals, return_void
 
     # Find the common merge point for two continuations
@@ -109,8 +169,11 @@ def install_continuation(cont, prompt_tag, args, env, current_cont, extend=False
         base, unwind = current_cont, None
         stop         = None
     else:
-        head1 = scan_continuation(current_cont, prompt_tag)
-        head2 = scan_continuation(cont, prompt_tag)
+        head1, handlers = scan_continuation(
+                current_cont, prompt_tag, look_for=cont, escape=escape)
+        if head1 is None:
+            return install_continuation_fast_path(current_cont, args, handlers, env, cont)
+        head2, _ = scan_continuation(cont, prompt_tag)
         base, stop, unwind, rewind = find_merge_point(head1, head2)
 
     # Append the continuations at the appropriate prompt
@@ -242,7 +305,8 @@ def call_with_escape_continuation_cont(env, cont, _vals):
 def call_with_escape_continuation(proc, prompt_tag, env, cont, extra_call_info):
     assert prompt_tag is None, "NYI"
     cont = call_with_escape_continuation_cont(env, cont)
-    return proc.call_with_extra_info([values.W_Continuation(cont)], env, cont, extra_call_info)
+    return proc.call_with_extra_info([values.W_EscapeContinuation(cont)],
+                                     env, cont, extra_call_info)
 
 @expose("call-with-composable-continuation",
         [procedure, default(values.W_ContinuationPromptTag, values.w_default_continuation_prompt_tag)],
@@ -304,15 +368,15 @@ def call_with_continuation_prompt(args, env, cont):
     parser  = ArgParser("call-with-continuation-prompt", args)
     tag     = values.w_default_continuation_prompt_tag
     handler = values.w_false
-    fun     = parser.object()
+    fun     = parser.expect(values.W_Object)
 
     try:
-        tag     = parser.prompt_tag()
-        handler = parser.object()
+        tag     = parser.expect(values.W_ContinuationPromptTag)
+        handler = parser.expect(values.W_Object)
     except EndOfInput:
         pass
 
-    args = parser._object()
+    args = parser.expect_many(values.W_Object)
     if not fun.iscallable():
         raise SchemeException("call-with-continuation-prompt: not given callable function")
     if handler is not values.w_false and not handler.iscallable():

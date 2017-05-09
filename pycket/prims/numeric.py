@@ -2,15 +2,19 @@
 # -*- coding: utf-8 -*-
 import math
 import operator
-from pycket import values
-from pycket import vector as values_vector
-from pycket.arity import Arity
-from pycket.error import SchemeException
-from pycket.prims.expose import expose, default, unsafe
-from rpython.rlib.rbigint import rbigint
-from rpython.rlib         import jit, longlong2float, rarithmetic
+
+from pycket                                  import values
+from pycket                                  import vector as values_vector
+from pycket.arity                            import Arity
+from pycket.error                            import SchemeException
+from pycket.prims.expose                     import expose, default, unsafe
+
+from rpython.rlib                            import jit, longlong2float, rarithmetic, unroll
+from rpython.rlib.rarithmetic                import r_uint
+from rpython.rlib.objectmodel                import always_inline, specialize
+from rpython.rlib.rbigint                    import rbigint
 from rpython.rtyper.lltypesystem.lloperation import llop
-from rpython.rtyper.lltypesystem.lltype import Signed
+from rpython.rtyper.lltypesystem.lltype      import Signed
 
 # imported for side effects
 from pycket import arithmetic
@@ -53,32 +57,29 @@ def integerp(n):
 
 @expose("exact-integer?", [values.W_Object])
 def exact_integerp(n):
-    return values.W_Bool.make(isinstance(n, values.W_Fixnum) or
-                              isinstance(n, values.W_Bignum))
+    return values.W_Bool.make(isinstance(n, values.W_Integer))
 
 @expose("exact-nonnegative-integer?", [values.W_Object])
 def exact_nonneg_integerp(n):
-    from rpython.rlib.rbigint import rbigint
+    from rpython.rlib.rbigint import NULLRBIGINT
     if isinstance(n, values.W_Fixnum):
         return values.W_Bool.make(n.value >= 0)
     if isinstance(n, values.W_Bignum):
-        return values.W_Bool.make(n.value.ge(rbigint.fromint(0)))
+        return values.W_Bool.make(n.value.ge(NULLRBIGINT))
     return values.w_false
 
 @expose("exact-positive-integer?", [values.W_Object])
 def exact_nonneg_integerp(n):
-    from rpython.rlib.rbigint import rbigint
+    from rpython.rlib.rbigint import NULLRBIGINT
     if isinstance(n, values.W_Fixnum):
         return values.W_Bool.make(n.value > 0)
     if isinstance(n, values.W_Bignum):
-        return values.W_Bool.make(n.value.gt(rbigint.fromint(0)))
+        return values.W_Bool.make(n.value.gt(NULLRBIGINT))
     return values.w_false
 
+@always_inline
 def is_real(obj):
-    return (isinstance(obj, values.W_Fixnum) or
-            isinstance(obj, values.W_Bignum) or
-            isinstance(obj, values.W_Flonum) or
-            isinstance(obj, values.W_Rational))
+    return isinstance(obj, values.W_Real)
 
 @expose("real?", [values.W_Object])
 def realp(n):
@@ -431,7 +432,7 @@ def unsafe_fxtimes(a, b):
 
 @expose("unsafe-fxquotient", [unsafe(values.W_Fixnum)] * 2)
 def unsafe_fxquotient(a, b):
-    return values.W_Fixnum.make(llop.int_floordiv(Signed, a.value, b.value))
+    return values.W_Fixnum(rarithmetic.int_c_div(a.value, b.value))
 
 @expose("unsafe-fxremainder", [unsafe(values.W_Fixnum)] * 2)
 def unsafe_fxquotient(w_a, w_b):
@@ -440,7 +441,7 @@ def unsafe_fxquotient(w_a, w_b):
     res = a % b
     if w_a.value < 0:
         res = -res
-    return values.W_Fixnum.make(res)
+    return values.W_Fixnum(res)
 
 @expose("fx->fl", [values.W_Fixnum])
 def fxfl(a):
@@ -480,13 +481,13 @@ def real_floating_point_bytes(n, _size, big_endian):
         intval = rarithmetic.byteswap(intval)
 
     chars  = [chr((intval >> (i * 8)) % 256) for i in range(size)]
-    return values.W_Bytes(chars)
+    return values.W_Bytes.from_charlist(chars)
 
 @expose("floating-point-bytes->real",
         [values.W_Bytes, default(values.W_Object, values.w_false)])
 def integer_bytes_to_integer(bstr, signed):
     # XXX Currently does not make use of the signed parameter
-    bytes = bstr.value
+    bytes = bstr.as_bytes_list()
     if len(bytes) not in (4, 8):
         raise SchemeException(
                 "floating-point-bytes->real: byte string must have length 2, 4, or 8")
@@ -498,14 +499,37 @@ def integer_bytes_to_integer(bstr, signed):
     return values.W_Flonum(longlong2float.longlong2float(val))
 
 @expose("integer-bytes->integer",
-        [values.W_Bytes, default(values.W_Object, values.w_false),
-         default(values.W_Object, values.w_false)])
-def integer_bytes_to_integer(bstr, signed, big_endian):
-    # XXX Currently does not make use of the signed or big endian parameter
-    bytes = bstr.value
-    if len(bytes) not in (2, 4, 8):
+        [values.W_Bytes,
+         default(values.W_Object, values.w_false),
+         default(values.W_Object, values.w_false),
+         default(values.W_Fixnum, values.W_Fixnum.ZERO),
+         default(values.W_Fixnum, None)])
+def integer_bytes_to_integer(bstr, signed, big_endian, w_start, w_end):
+    bytes = bstr.as_bytes_list()
+
+    start = w_start.value
+    if w_end is None:
+        end = len(bytes)
+    else:
+        end = w_end.value
+
+    if not (0 <= start < len(bytes)):
+        raise SchemeException(
+                "integer-bytes->integer: start position not in byte string")
+    if not (0 <= end <= len(bytes)):
+        raise SchemeException(
+                "integer-bytes->integer: end position not in byte string")
+    if end < start:
+        raise SchemeException(
+                "integer-bytes->integer: end position less than start position")
+
+    length = end - start
+    if length not in (2, 4, 8):
         raise SchemeException(
                 "integer-bytes->integer: byte string must have length 2, 4, or 8")
+
+    if start != 0 or end != len(bytes):
+        bytes = bytes[start:end]
 
     byteorder = "little" if big_endian is values.w_false else "big"
     is_signed = signed is not values.w_false
@@ -517,8 +541,15 @@ def integer_bytes_to_integer(bstr, signed, big_endian):
     return result
 
 @expose("integer->integer-bytes",
-        [values.W_Number, values.W_Fixnum, default(values.W_Object, values.w_false)])
-def integer_to_integer_bytes(n, _size, signed):
+        [values.W_Number,
+         values.W_Fixnum,
+         default(values.W_Object, values.w_false),
+         default(values.W_Object, values.w_false),
+         default(values.W_Bytes, None),
+         default(values.W_Fixnum, values.W_Fixnum.ZERO)])
+@jit.unroll_safe
+def integer_to_integer_bytes(n, w_size, signed, big_endian, w_dest, w_start):
+    from rpython.rtyper.lltypesystem import rffi
     if isinstance(n, values.W_Fixnum):
         intval = n.value
     elif isinstance(n, values.W_Bignum):
@@ -526,12 +557,91 @@ def integer_to_integer_bytes(n, _size, signed):
     else:
         raise SchemeException("integer->integer-bytes: expected exact integer")
 
-    size = _size.value
+    size = jit.promote(w_size.value)
     if size not in (2, 4, 8):
         raise SchemeException("integer->integer-bytes: size not 2, 4, or 8")
 
-    chars  = [chr((intval >> (i * 8)) % 256) for i in range(size)]
-    return values.W_Bytes(chars)
+    size  = size
+    start = w_start.value
+    if w_dest is not None:
+        chars = w_dest.as_bytes_list()
+        result = w_dest
+    else:
+        chars = ['\x00'] * size
+        result = values.W_Bytes.from_charlist(chars, immutable=False)
+
+    if start < 0:
+        raise SchemeException(
+            "integer->integer-bytes: start value less than zero")
+
+    if start + size > len(chars):
+        raise SchemeException(
+            "integer->integer-bytes: byte string length is less than starting "
+            "position plus size")
+
+    is_signed = signed is not values.w_false
+    for i in range(start, start+size):
+        chars[i] = chr(intval & 0xFF)
+        intval >>= 8
+
+    if big_endian is values.w_false:
+        return result
+
+    # Swap the bytes if for big endian
+    left = start
+    right = start + size - 1
+    while left < right:
+        chars[left], chars[right] = chars[right], chars[left]
+        left, right = left + 1, right - 1
+
+    return result
+
+@expose("integer-length", [values.W_Object])
+@jit.elidable
+def integer_length(obj):
+
+    if isinstance(obj, values.W_Fixnum):
+        val = obj.value
+        if val < 0:
+            val = ~val
+
+        n = r_uint(val)
+        result = 0
+        while n:
+            n >>= r_uint(1)
+            result += 1
+        return values.wrap(result)
+
+    if isinstance(obj, values.W_Bignum):
+        # XXX The bit_length operation on rbigints is off by one for negative
+        # powers of two (this may be intentional?).
+        # So, we detect this case and apply a correction.
+        bignum = obj.value
+        negative_power_of_two = True
+
+        if not bignum.tobool():
+            return values.W_Fixnum.ZERO
+        elif bignum.sign != -1:
+            negative_power_of_two = False
+        else:
+            for i in range(bignum.size - 1):
+                if bignum.udigit(i) != 0:
+                    negative_power_of_two = False
+                    break
+
+            msd = bignum.udigit(r_uint(bignum.size - 1))
+            while msd:
+                if (msd & r_uint(0x1)) and msd != r_uint(1):
+                    negative_power_of_two = False
+                    break
+                msd >>= r_uint(1)
+
+        bit_length = bignum.bit_length()
+        if negative_power_of_two:
+            bit_length -= 1
+        return values.wrap(bit_length)
+
+    raise SchemeException("integer-length: expected exact-integer? got %s" % obj.tostring())
 
 # FIXME: implementation
 @expose("fxvector?", [values.W_Object])

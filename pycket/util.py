@@ -2,9 +2,24 @@
 # -*- coding: utf-8 -*-
 
 import inspect
+import string
 
 from rpython.rlib        import jit, objectmodel
 from rpython.rlib.unroll import unrolling_iterable
+
+def snake_case(str):
+    if not str:
+        return str
+    first = str[0]
+    last = str[-1]
+    body = str[1:-1]
+    new = []
+    for b in body:
+        if b in string.uppercase:
+            new.append("_" + b.lower())
+        else:
+            new.append(b)
+    return first.lower() + "".join(new) + last.lower()
 
 def memoize(f):
     cache = {}
@@ -24,7 +39,7 @@ def memoize_constructor(cls):
     setattr(cls, "make", staticmethod(memoize(cls)))
     return cls
 
-def strip(str):
+def strip_immutable_field_name(str):
     return str.replace("[*]", "")
 
 def add_copy_method(copy_method="copy"):
@@ -44,7 +59,7 @@ def add_copy_method(copy_method="copy"):
             if base is object:
                 continue
             fields = getattr(base, "_immutable_fields_", [])
-            field_names.extend(map(strip, fields))
+            field_names.extend(map(strip_immutable_field_name, fields))
 
         field_names = unrolling_iterable(field_names)
 

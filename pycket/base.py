@@ -55,7 +55,7 @@ class W_Object(W_ProtoObject):
         pass # need to override in callables that are based on an AST
 
     # an arity is a pair of a list of numbers and either -1 or a non-negative integer
-    def get_arity(self):
+    def get_arity(self, promote=False):
         if self.iscallable():
             return Arity.unknown
         else:
@@ -65,7 +65,7 @@ class W_Object(W_ProtoObject):
         if self.iscallable():
             return None
         else:
-            raise SchemeException("%s does not have arity" % self.tostring())
+            raise SchemeException("%s does not have result arity" % self.tostring())
 
     # Interface for structs
 
@@ -97,6 +97,8 @@ class W_Object(W_ProtoObject):
         return {}
     def is_non_interposing_chaperone(self):
         return False
+    def replace_proxied(self, other):
+        raise ValueError("Not a proxy")
 
     def is_proper_list(self):
         return False

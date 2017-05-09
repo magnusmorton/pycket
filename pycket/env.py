@@ -8,6 +8,7 @@ from pycket.config            import get_testing_config
 
 class SymList(object):
     _immutable_fields_ = ["elems[*]", "prev"]
+
     def __init__(self, elems, prev=None):
         assert isinstance(elems, list)
         self.elems = elems
@@ -43,13 +44,13 @@ class SymList(object):
         return target
 
     def depth_and_size(self):
-        res = 0
+        depth = 0
         size = 0
         while self is not None:
             size += len(self.elems)
             self = self.prev
-            res += 1
-        return res, size
+            depth += 1
+        return depth, size
 
     def depth_of_var(self, var):
         depth = 0
@@ -67,6 +68,11 @@ class SymList(object):
             if e is var:
                 return True
         return False
+
+    def drop_frames(self, n):
+        for i in range(n):
+            self = self.prev
+        return self
 
     def __repr__(self):
         return "SymList(%r, %r)" % (self.elems, self.prev)
@@ -128,12 +134,12 @@ class Env(W_Object):
     def pycketconfig(self):
         return self.toplevel_env()._pycketconfig.pycket
 
-
 class Version(object):
     pass
 
 
 class ToplevelEnv(Env):
+    _attrs_ = ['bindings', 'version', 'module_env', 'commandline_arguments', 'callgraph', 'globalconfig', '_pycketconfig']
     _immutable_fields_ = ["version?", "module_env"]
     def __init__(self, pycketconfig=None):
         from rpython.config.config import Config
@@ -178,7 +184,9 @@ class ToplevelEnv(Env):
 
 @inline_small_list(immutable=True, attrname="vals", factoryname="_make", unbox_num=True, nonull=True)
 class ConsEnv(Env):
+    _immutable_ = True
     _immutable_fields_ = ["_prev"]
+    _attrs_ = ["_prev"]
     def __init__ (self, prev):
         assert isinstance(prev, Env)
         self._prev = prev

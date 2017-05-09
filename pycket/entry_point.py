@@ -3,9 +3,24 @@
 #
 # _____ Define and setup target ___
 
-import os
-from rpython.rlib          import jit, objectmodel
-from rpython.rlib.nonconst import NonConstant
+from rpython.rlib import jit, objectmodel
+
+POST_RUN_CALLBACKS = []
+
+def register_post_run_callback(callback):
+    """
+    Registers functions to be called after the user program terminates.
+    This is mostly useful for defining debugging/logging hooks to print out
+    runtime stats after the program is done.
+    """
+    POST_RUN_CALLBACKS.append(callback)
+    return callback
+
+@register_post_run_callback
+def save_callgraph(config, env):
+    if config.get('save-callgraph', False):
+        with open('callgraph.dot', 'w') as outfile:
+            env.callgraph.write_dot_file(outfile)
 
 class TopLevelHolder(object):
     
@@ -46,10 +61,7 @@ def make_entry_point(pycketconfig=None):
         # Pycket defaults
         jit.set_param(None, "threshold", 131)
         jit.set_param(None, "trace_eagerness", 50)
-
-        if NonConstant(False):
-            # Hack to give os.open() the correct annotation
-            os.open('foo', 1, 1)
+        jit.set_param(None, "max_unroll_loops", 15)
 
         config, names, args, retval = parse_args(argv)
         if retval != 0 or config is None:
@@ -76,9 +88,8 @@ def make_entry_point(pycketconfig=None):
             val = interpret_module(ast, env)
         finally:
             from pycket.prims.input_output import shutdown
-            if config.get('save-callgraph', False):
-                with open('callgraph.dot', 'w') as outfile:
-                    env.callgraph.write_dot_file(outfile)
+            for callback in POST_RUN_CALLBACKS:
+                callback(config, env)
             shutdown(env)
         return 0
     return entry_point

@@ -29,9 +29,10 @@ def do_make_sibling_instpector(inspector, env, cont):
 def do_is_struct(v, env, cont):
     from pycket.interpreter import return_value
     current_inspector = values_struct.current_inspector_param.get(cont)
-    result = (isinstance(v, values_struct.W_RootStruct) and
-              current_inspector.has_control(v.struct_type()))
-    return return_value(values.W_Bool.make(result), env, cont)
+    if isinstance(v, values_struct.W_RootStruct):
+        if current_inspector.has_control(v.struct_type()):
+            return return_value(values.w_true, env, cont)
+    return return_value(values.w_false, env, cont)
 
 @expose("struct-info", [values.W_Object], simple=False)
 def do_struct_info(v, env, cont):
@@ -81,6 +82,9 @@ def do_make_struct_type(name, super_type, w_init_field_cnt, w_auto_field_cnt,
         auto_v, props, inspector, proc_spec, w_immutables, guard, constr_name, env, cont):
     if inspector is None:
         inspector = values_struct.current_inspector_param.get(cont)
+
+    if constr_name is not values.w_false and not isinstance(constr_name, values.W_Symbol):
+        raise SchemeException("make-struct-type: constructor name mustbe be symbol? or #f")
 
     if not isinstance(super_type, values_struct.W_StructType) and super_type is not values.w_false:
         raise SchemeException("make-struct-type: expected a struct-type? or #f")
@@ -153,13 +157,15 @@ def expose_prefab_key2struct_type(w_key, field_count):
 def do_prefab_key(v):
     return values_struct.W_PrefabKey.is_prefab_key(v)
 
+w_can_impersonate = values.W_Symbol.make("can-impersonate")
+
 @expose("make-struct-type-property", [values.W_Symbol,
                                       default(values.W_Object, values.w_false),
                                       default(values.W_List, values.w_null),
                                       default(values.W_Object, values.w_false)])
 def mk_stp(sym, guard, supers, _can_imp):
     can_imp = False
-    if guard is values.W_Symbol.make("can-impersonate"):
+    if guard is w_can_impersonate:
         guard = values.w_false
         can_imp = True
     if _can_imp is not values.w_false:
@@ -180,7 +186,7 @@ def unsafe_struct_ref(v, k):
 @expose("unsafe-struct-set!", [values.W_Object, unsafe(values.W_Fixnum),
     values.W_Object])
 def unsafe_struct_set(v, k, val):
-    v = imp. get_base_object(v)
+    v = imp.get_base_object(v)
     assert isinstance(v, values_struct.W_Struct)
     assert 0 <= k.value < v.struct_type().total_field_cnt
     return v._set(k.value, val)

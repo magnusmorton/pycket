@@ -236,11 +236,20 @@ def parse_ast(json_string):
     modtable = ModTable()
     return to_ast(json, modtable)
 
+def finalize_module(mod):
+    from pycket.interpreter    import Context
+    from pycket.assign_convert import assign_convert
+    mod = Context.normalize_term(mod)
+    mod = assign_convert(mod)
+    mod.clean_caches()
+    return mod
+
 def parse_module(json_string, bytecode_expand=False):
     json = pycket_json.loads(json_string)
     modtable = ModTable()
     reader = JsonLoader(bytecode_expand)
-    return reader.to_module(json).assign_convert_module()
+    module = reader.to_module(json)
+    return finalize_module(module)
 
 #### ========================== Implementation functions
 
@@ -257,23 +266,29 @@ def dbgprint(funcname, json, lib="", filename=""):
             s = "[" + ", ".join([j.tostring() for j in json]) + "]"
         print "Entering %s with: json - %s | lib - %s | filename - %s " % (funcname, s, lib, filename)
 
+def get_lexical(x):
+    assert x.is_object
+    x = x.value_object()["lexical"]
+    assert x.is_string
+    x = x.value_string()
+    return values.W_Symbol.make(x)
+
 def to_formals(json):
     dbgprint("to_formals", json)
     make = values.W_Symbol.make
-    lex  = lambda x : x.value_object()["lexical"].value_string()
     if json.is_object:
         obj = json.value_object()
         if "improper" in obj:
             improper_arr = obj["improper"]
             regular, last = improper_arr.value_array()
-            regular_symbols = [make(lex(x)) for x in regular.value_array()]
-            last_symbol = make(lex(last))
+            regular_symbols = [get_lexical(x) for x in regular.value_array()]
+            last_symbol = get_lexical(last)
             return regular_symbols, last_symbol
         elif "lexical" in obj:
             return [], make(obj["lexical"].value_string())
     elif json.is_array:
         arr = json.value_array()
-        return [make(lex(x)) for x in arr], None
+        return [get_lexical(x) for x in arr], None
     assert 0
 
 def mksym(json):
@@ -421,7 +436,8 @@ class JsonLoader(object):
         fname = rpath.realpath(fname)
         data = expand_file_rpython(fname, self._lib_string())
         self.modtable.enter_module(fname)
-        module = self.to_module(pycket_json.loads(data)).assign_convert_module()
+        module = self.to_module(pycket_json.loads(data))
+        module = finalize_module(module)
         self.modtable.exit_module(fname, module)
         return module
 
@@ -430,7 +446,8 @@ class JsonLoader(object):
         modname = rpath.realpath(modname)
         data = readfile_rpython(fname)
         self.modtable.enter_module(modname)
-        module = self.to_module(pycket_json.loads(data)).assign_convert_module()
+        module = self.to_module(pycket_json.loads(data))
+        module = finalize_module(module)
         self.modtable.exit_module(modname, module)
         return module
 
@@ -447,8 +464,10 @@ class JsonLoader(object):
         rhss  = [None] * len(arr)
         for i, v in enumerate(arr):
             varr = v.value_array()
-            fmls = [values.W_Symbol.make(x.value_string()) for x in varr[0].value_array()]
+            names, defs = varr[0].value_array(), varr[1]
+            fmls = [values.W_Symbol.make(x.value_string()) for x in names]
             rhs = self.to_ast(varr[1])
+            assert isinstance(rhs, AST)
             varss[i] = fmls
             rhss[i]  = rhs
         return varss, rhss
@@ -477,7 +496,7 @@ class JsonLoader(object):
     def _parse_require(self, path):
         dbgprint("parse_require", path, self._lib_string(), path)
         fname, subs = path[0], path[1:]
-        if fname in [".", ".."]:
+        if fname in (".", ".."):
             # fname field is not used in this case, so we just give an idea of which
             # module we are in
             return Require(self.modtable.current_mod(), None, path=path)
@@ -496,7 +515,7 @@ class JsonLoader(object):
             for k, v in config_obj.iteritems():
                 config[k] = v.value_string()
 
-            be_json = config.get("bytecode_expand", "false") == "true"
+            be_json = config.get("bytecode-expand", "false") == "true"
             if self.bytecode_expand != be_json:
                 modname = getkey(obj, "module-name", type='s')
                 raise ValueError('Byte-expansion is : %s, but "bytecode-expand" '
@@ -516,9 +535,26 @@ class JsonLoader(object):
 
     @staticmethod
     def is_builtin_operation(rator):
-        return ("source-name" in rator and
-                    ("source-module" not in rator or
-                    rator["source-module"].value_string() == "#%kernel"))
+        """ Sanity check for testing """
+        if we_are_translated():
+            return True
+        if "source-name" not in rator:
+            return False
+        if "source-module" not in rator:
+            return True
+        if rator["source-module"].value_string() == "%kernel":
+            return True
+        return False
+
+    def parse_if(self, cond, then, els):
+        """ Avoid building branch of an if-expression when cond is a constant """
+        cond = self.to_ast(cond)
+        if not isinstance(cond, Quote):
+            then = self.to_ast(then)
+            els  = self.to_ast(els)
+            return If(cond, then, els)
+        branch = els if cond.w_val is values.w_false else then
+        return self.to_ast(branch)
 
     def to_ast(self, json):
         dbgprint("to_ast", json, lib=self._lib_string(), filename="")
@@ -527,48 +563,43 @@ class JsonLoader(object):
         if json.is_array:
             arr = json.value_array()
             rator = arr[0].value_object()
-            if JsonLoader.is_builtin_operation(rator):
-                ast_elem = rator["source-name"].value_string()
-                if ast_elem == "begin":
-                    return Begin([self.to_ast(x) for x in arr[1:]])
-                if ast_elem == "#%expression":
-                    return self.to_ast(arr[1])
-                if ast_elem == "set!":
-                    target = arr[1].value_object()
-                    var = None
-                    if "source-name" in target:
-                        srcname = mksym(target["source-name"].value_string())
-                        if "source-module" in target:
-                            if target["source-module"].is_array:
-                                path_arr = target["source-module"].value_array()
-                                srcmod, path = parse_path(path_arr)
-                            else:
-                                srcmod = path = None
+            assert JsonLoader.is_builtin_operation(rator)
+            ast_elem = rator["source-name"].value_string()
+            if ast_elem == "begin":
+                return Begin([self.to_ast(arr[i]) for i in range(1, len(arr))])
+            if ast_elem == "#%expression":
+                return self.to_ast(arr[1])
+            if ast_elem == "set!":
+                target = arr[1].value_object()
+                var = None
+                if "source-name" in target:
+                    srcname = mksym(target["source-name"].value_string())
+                    if "source-module" in target:
+                        if target["source-module"].is_array:
+                            path_arr = target["source-module"].value_array()
+                            srcmod, path = parse_path(path_arr)
                         else:
-                            srcmod = "#%kernel"
-                            path   = None
+                            srcmod = path = None
+                    else:
+                        srcmod = "#%kernel"
+                        path   = None
 
-                        modname = mksym(target["module"].value_string()) if "module" in target else srcname
-                        var = ModuleVar(modname, srcmod, srcname, path)
-                    elif "lexical" in target:
-                        var = CellRef(values.W_Symbol.make(target["lexical"].value_string()))
-                    elif "toplevel" in target:
-                        var = ToplevelVar(mksym(target["toplevel"].value_string()))
-                    return SetBang(var, self.to_ast(arr[2]))
-                if ast_elem == "#%top":
-                    assert 0
-                    return CellRef(mksym(arr[1].value_object()["symbol"].value_string()))
-                if ast_elem == "begin-for-syntax":
-                    return VOID
-                if ast_elem == "define-syntaxes":
-                    return VOID
-                # The parser now ignores `#%require` AST nodes.
-                # The actual file to include is now generated by expander
-                # as an object that is handled below.
-                if ast_elem == "#%require":
-                    return VOID
-                if ast_elem == "#%provide":
-                    return VOID
+                    modname = mksym(target["module"].value_string()) if "module" in target else srcname
+                    var = ModuleVar(modname, srcmod, srcname, path)
+                elif "lexical" in target:
+                    var = CellRef(values.W_Symbol.make(target["lexical"].value_string()))
+                else:
+                    assert "toplevel" in target
+                    var = ToplevelVar(mksym(target["toplevel"].value_string()))
+                return SetBang(var, self.to_ast(arr[2]))
+            if ast_elem == "#%top":
+                assert 0
+                return CellRef(mksym(arr[1].value_object()["symbol"].value_string()))
+            # The parser now ignores `#%require` AST nodes.
+            # The actual file to include is now generated by expander
+            # as an object that is handled below.
+            if ast_elem == "#%provide":
+                return VOID
             assert 0, "Unexpected ast-element element: %s" % json.tostring()
         if json.is_object:
             obj = json.value_object()
@@ -609,7 +640,6 @@ class JsonLoader(object):
                     return Begin.make(body)
                 else:
                     vs, rhss = self.to_bindings(bindings)
-                    assert isinstance(rhss[0], AST)
                     return make_letrec(list(vs), list(rhss), body)
             if "let-bindings" in obj:
                 body = [self.to_ast(x) for x in obj["let-body"].value_array()]
@@ -618,7 +648,6 @@ class JsonLoader(object):
                     return Begin.make(body)
                 else:
                     vs, rhss = self.to_bindings(bindings)
-                    assert isinstance(rhss[0], AST)
                     return make_let(vs, rhss, body)
             if "variable-reference" in obj:
                 current_mod = self.modtable.current_mod()
@@ -635,12 +664,9 @@ class JsonLoader(object):
             if "operator" in obj:
                 rator = self.to_ast(obj["operator"])
                 rands = [self.to_ast(x) for x in obj["operands"].value_array()]
-                return App.make_let_converted(rator, rands)
+                return App.make(rator, rands)
             if "test" in obj:
-                cond = self.to_ast(obj["test"])
-                then = self.to_ast(obj["then"])
-                els  = self.to_ast(obj["else"])
-                return If.make_let_converted(cond, then, els)
+                return self.parse_if(obj["test"], obj["then"], obj["else"])
             if "quote" in obj:
                 return Quote(to_value(obj["quote"]))
             if "quote-syntax" in obj:
@@ -754,7 +780,7 @@ def to_value(json):
             return values.to_improper([to_value(v) for v in improper[0].value_array()], to_value(improper[1]))
         if "void" in obj:
             return values.w_void
-        for i in ["toplevel", "lexical", "module", "source-name"]:
+        for i in ["lexical", "module", "source-name", "toplevel"]:
             if i in obj:
                 return values.W_Symbol.make(obj[i].value_string())
     if json.is_array:

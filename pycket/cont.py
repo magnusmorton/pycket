@@ -64,6 +64,10 @@ class BaseCont(object):
         from pycket.interpreter import return_void
         return return_void(env, cont)
 
+    def rewind(self, env, cont):
+        from pycket.interpreter import return_void
+        return return_void(env, cont)
+
     def clone(self):
         result = self._clone()
         if self.marks is not None:
@@ -146,6 +150,8 @@ class BaseCont(object):
 # Continuation used to signal that the computation is done.
 class NilCont(BaseCont):
 
+    _attrs_ = []
+
     def _clone(self):
         return NilCont()
 
@@ -170,7 +176,7 @@ def get_forward_mark(prev):
 
 class Cont(BaseCont):
 
-    _immutable_fields_ = ['env', 'prev']
+    _attrs_ = _immutable_fields_ = ['env', 'prev']
 
     def __init__(self, env, prev):
         BaseCont.__init__(self, marks=get_forward_mark(prev))
@@ -208,7 +214,7 @@ class Cont(BaseCont):
 
 class Prompt(Cont):
 
-    _immutable_fields_ = ['tag', 'handler']
+    _attrs_ = _immutable_fields_ = ['tag', 'handler']
 
     def __init__(self, tag, handler, env, prev):
         Cont.__init__(self, env, prev)
@@ -238,6 +244,8 @@ class Prompt(Cont):
 
 class Barrier(Cont):
 
+    _attrs_ = []
+
     def _clone(self):
         return Barrier(self.env, self.prev)
 
@@ -251,7 +259,7 @@ def _make_args_class(base, argnames):
     unroll_argnames = unroll.unrolling_iterable(enumerate(argnames))
 
     class Args(base):
-        _immutable_fields_ = getattr(base, '_immutable_fields_', []) + argnames
+        _attrs_ = _immutable_fields_ = argnames
         def _init_args(self, *args):
             for i, name in unroll_argnames:
                 setattr(self, name, args[i])
@@ -292,7 +300,6 @@ def continuation(func):
         env = args[-2]
         cont = args[-1]
         Cont.__init__(self, env, cont)
-        args = args[:-2]
         self._init_args(*args)
     PrimCont.__init__ = __init__
 
@@ -326,7 +333,7 @@ def make_label(func, enter=False):
     assert not varkw and not defaults
     if varargs: # grrr, bad
         class Args(Cont):
-            _immutable_fields_ = ["args"]
+            _attrs_ = _immutable_fields_ = ["args"]
             def __init__(self, *args):
                 Cont.__init__(self, args[-2], args[-1])
                 self.args = args[:-2]
@@ -338,6 +345,7 @@ def make_label(func, enter=False):
                 return "%s%s" % (self.__class__.__name__, len(self._get_args()))
 
     else:
+        assert func_argnames[-1] == "cont", "last argument to %s must be named 'cont', not %r" % (func.func_name, func_argnames[-1])
         assert func_argnames[-2] == "env", "next to last argument to %s must be named 'env', not %r" % (func.func_name, func_argnames[-2])
 
         Args = _make_args_class(Cont, func_argnames[:-2])
@@ -345,7 +353,6 @@ def make_label(func, enter=False):
             env = args[-2]
             cont = args[-1]
             Cont.__init__(self, env, cont)
-            args = args[:-2]
             self._init_args(*args)
         Args.__init__ = __init__
 

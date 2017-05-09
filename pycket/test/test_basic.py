@@ -124,6 +124,8 @@ def test_void():
 def test_mcons():
     run_fix ("(mcar (mcons 1 2))", 1)
     run_fix ("(mcdr (mcons 1 2))", 2)
+    run_fix ("(unsafe-mcar (mcons 1 2))", 1)
+    run_fix ("(unsafe-mcdr (mcons 1 2))", 2)
     with pytest.raises(SchemeException):
         run("(mcar 1)", None)
     with pytest.raises(SchemeException):
@@ -549,8 +551,9 @@ def test_tostring_of_list():
     assert l.tostring() == "(0 1 . 5)"
 
 def test_callgraph_reconstruction():
-    from pycket.expand import expand_string, parse_module
-    from pycket        import config
+    from pycket.expand    import expand_string, parse_module
+    from pycket           import config
+    from pycket.callgraph import LOOP_PARTICIPANT, LOOP_HEADER
     str = """
         #lang pycket
         (define (f x) (g (+ x 1)))
@@ -586,8 +589,9 @@ def test_callgraph_reconstruction():
     h = m.defs[W_Symbol.make("h")].closure.caselam.lams[0]
 
     assert env.callgraph.calls == {f: {g: None}, g: {h: None, f: None}}
-    assert env.callgraph.recursive == {f: None, g: None}
-    assert g.body[0].should_enter
+    assert (env.callgraph.recursive == {f: LOOP_HEADER, g: LOOP_PARTICIPANT} or
+            env.callgraph.recursive == {f: LOOP_PARTICIPANT, g: LOOP_HEADER})
+    assert g.body[0].should_enter or f.body[0].should_enter
 
 def test_callgraph_reconstruction_through_primitives():
     from pycket.expand import expand_string, parse_module
@@ -630,8 +634,6 @@ def test_should_enter_downrecursion():
                (define fn-1 (n-1 f))
                (lambda (x) (f (fn-1 x))))]))
         (n->f 10)
-
-
     """
 
     ast = parse_module(expand_string(str))
@@ -647,7 +649,7 @@ def test_should_enter_downrecursion():
     assert append.body[0].els.body[0].should_enter
 
     assert f.body[0].should_enter
-    assert f.body[0].els.body[0].should_enter
+    assert f.body[0].els.body[0].body[0].should_enter
 
 def test_reader_graph(doctest):
     """

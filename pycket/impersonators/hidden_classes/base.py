@@ -5,7 +5,7 @@ from pycket.error             import SchemeException
 from pycket.hidden_classes    import make_map_type, make_caching_map_type
 from pycket.prims.expose      import make_call_method
 from rpython.rlib             import jit
-from rpython.rlib.objectmodel import specialize
+from rpython.rlib.objectmodel import specialize, we_are_translated
 
 @jit.unroll_safe
 def lookup_property(obj, prop):
@@ -17,13 +17,14 @@ def lookup_property(obj, prop):
     return None
 
 class Counter(object):
-    __attrs__ = ['value']
+    _attrs_ = ['value']
     def __init__(self):
         self.value = 0
     def inc(self):
         self.value += 1
 
 def add_impersonator_counts(cls):
+    from pycket.entry_point import register_post_run_callback
     cls.impersonators = Counter()
     cls.chaperones    = Counter()
     old_init = cls.__init__
@@ -36,6 +37,15 @@ def add_impersonator_counts(cls):
             cls.chaperones.inc()
         else:
             assert False
+
+    name = cls.__name__
+
+    @register_post_run_callback
+    def callback(config, env):
+        impersonators = cls.impersonators.value
+        chaperones    = cls.chaperones.value
+        print "%s(impersonators=%d, chaperones=%d)" % (name, impersonators, chaperones)
+    register_post_run_callback(callback)
 
     counting_init.__name__ = old_init.__name__
     cls.__init__ = counting_init
@@ -98,8 +108,6 @@ def get_base_object(x):
         x = x.get_base()
     return x
 
-EMPTY_PROPERTY_MAP = make_caching_map_type("get_storage_index").EMPTY
-
 @jit.unroll_safe
 @specialize.argtype(1)
 def make_property_map(prop_keys, map):
@@ -118,9 +126,42 @@ def make_specialized_property_map(prop_keys, map):
         map = map.add_dynamic_attribute(key)
     return map
 
+class W_ImpPropertyDescriptor(values.W_Object):
+    errorname = "chaperone-property"
+    _immutable_fields_ = ["name"]
+    def __init__(self, name):
+        if we_are_translated():
+            assert name is not None
+        self.name = name
+    def tostring(self):
+        return "#<chaperone-property>"
+
+class W_ImpPropertyFunction(values.W_Procedure):
+    _immutable_fields_ = ["descriptor"]
+    def __init__(self, descriptor):
+        self.descriptor = descriptor
+
+class W_ImpPropertyPredicate(W_ImpPropertyFunction):
+    errorname = "impersonator-property-predicate"
+
+    @make_call_method([values.W_Object])
+    def call(self, obj):
+        return values.W_Bool.make(lookup_property(obj, self.descriptor) is not None)
+
+class W_ImpPropertyAccessor(W_ImpPropertyFunction):
+    errorname = "impersonator-property-accessor"
+
+    @make_call_method([values.W_Object])
+    def call(self, obj):
+        return lookup_property(obj, self.descriptor)
+
+w_impersonator_prop_application_mark = W_ImpPropertyDescriptor("impersonator-prop:application-mark")
+
+EMPTY_PROPERTY_MAP = make_caching_map_type("get_storage_index", W_ImpPropertyDescriptor).EMPTY
+
 class ProxyMixin(object):
 
-    EMPTY_MAP = make_map_type("get_property_index").EMPTY
+    EMPTY_MAP = make_map_type("get_property_index", W_ImpPropertyDescriptor).EMPTY
 
     _immutable_fields_ = ['property_map', 'property_storage[*]', 'inner', 'base']
 
@@ -133,8 +174,9 @@ class ProxyMixin(object):
         self.property_map = make_property_map(prop_keys, ProxyMixin.EMPTY_MAP)
         self.property_storage = prop_vals[:] if prop_vals is not None else None # Ensure not resized
 
-        if self.property_map is not ProxyMixin.EMPTY_MAP:
-            assert self.property_map.storage_size() == len(prop_vals)
+        if not we_are_translated():
+            if self.property_map is not ProxyMixin.EMPTY_MAP:
+                assert self.property_map.storage_size() == len(prop_vals)
 
     def get_property_index(self, index):
         return self.property_storage[index]
@@ -200,33 +242,4 @@ class ChaperoneMixin(object):
 class ImpersonatorMixin(object):
     def is_impersonator(self):
         return True
-
-class W_ImpPropertyDescriptor(values.W_Object):
-    errorname = "chaperone-property"
-    _immutable_fields_ = ["name"]
-    def __init__(self, name):
-        self.name = name
-    def tostring(self):
-        return "#<chaperone-property>"
-
-class W_ImpPropertyFunction(values.W_Procedure):
-    _immutable_fields_ = ["descriptor"]
-    def __init__(self, descriptor):
-        self.descriptor = descriptor
-
-class W_ImpPropertyPredicate(W_ImpPropertyFunction):
-    errorname = "impersonator-property-predicate"
-
-    @make_call_method([values.W_Object])
-    def call(self, obj):
-        return values.W_Bool.make(lookup_property(obj, self.descriptor) is not None)
-
-class W_ImpPropertyAccessor(W_ImpPropertyFunction):
-    errorname = "impersonator-property-accessor"
-
-    @make_call_method([values.W_Object])
-    def call(self, obj):
-        return lookup_property(obj, self.descriptor)
-
-w_impersonator_prop_application_mark = W_ImpPropertyDescriptor("impersonator-prop:application-mark")
 

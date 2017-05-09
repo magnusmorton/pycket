@@ -9,35 +9,30 @@ from pycket.env               import ConsEnv
 from pycket.error             import SchemeException
 from pycket.prims.expose      import make_call_method
 from pycket.small_list        import inline_small_list
-from pycket.util              import memoize_constructor
+from pycket.util              import add_copy_method, memoize_constructor
 
 from rpython.tool.pairtype    import extendabletype
-from rpython.rlib             import jit, runicode, rarithmetic
+from rpython.rlib             import jit, runicode, rarithmetic, rweaklist
 from rpython.rlib.rstring     import StringBuilder
 from rpython.rlib.objectmodel import always_inline, r_dict, compute_hash, we_are_translated
-from rpython.rlib.objectmodel import specialize
+from rpython.rlib.objectmodel import specialize, try_inline, import_from_mixin
 from rpython.rlib.rarithmetic import r_longlong, intmask
 
 import rpython.rlib.rweakref as weakref
 from rpython.rlib.rbigint import rbigint, NULLRBIGINT
 from rpython.rlib.debug import check_list_of_chars, make_sure_not_resized, check_regular_int
 
+
+from rpython.rlib import rmmap, rarithmetic, objectmodel
+from rpython.rlib.buffer import Buffer
+from rpython.rlib.rmmap import RValueError, RTypeError, RMMapError
+
 UNROLLING_CUTOFF = 5
-
-def elidable_iff(pred):
-    def wrapper(func):
-        func = jit.unroll_safe(func)
-
-        def trampoline(*args):
-            if jit.we_are_jitted() and pred(*args):
-                return elidable_func(*args)
-            return func(*args)
-
-        return trampoline
-    return wrapper
 
 @inline_small_list(immutable=True, attrname="vals", factoryname="_make")
 class Values(W_ProtoObject):
+    _attrs_ = []
+    _immutable_ = True
     def __init__(self):
         pass
 
@@ -76,6 +71,7 @@ class Values(W_ProtoObject):
 
 
 class W_Cell(W_Object): # not the same as Racket's box
+    _attrs_ = ["w_value"]
     def __init__(self, v):
         assert not isinstance(v, W_Cell)
         if isinstance(v, W_Fixnum):
@@ -113,11 +109,13 @@ class W_Cell(W_Object): # not the same as Racket's box
             self.w_value = w_value
 
 class W_CellIntegerStrategy(W_Object):
+    _attrs_ = ["value"]
     # can be stored in cells only, is mutated when a W_Fixnum is stored
     def __init__(self, value):
         self.value = value
 
 class W_CellFloatStrategy(W_Object):
+    _attrs_ = ["value"]
     # can be stored in cells only, is mutated when a W_Flonum is stored
     def __init__(self, value):
         self.value = value
@@ -125,6 +123,7 @@ class W_CellFloatStrategy(W_Object):
 
 class W_Undefined(W_Object):
     errorname = "unsafe-undefined"
+    _attrs_ = []
     def __init__(self):
         pass
 
@@ -132,7 +131,7 @@ w_unsafe_undefined = W_Undefined()
 
 # FIXME: not a real implementation
 class W_Syntax(W_Object):
-    _immutable_fields_ = ["val"]
+    _attrs_ = _immutable_fields_ = ["val"]
     errorname = "syntax"
     def __init__(self, o):
         self.val = o
@@ -141,14 +140,15 @@ class W_Syntax(W_Object):
 
 class W_ModulePathIndex(W_Object):
     errorname = "module-path-index"
+    _attrs_ = []
     def __init__(self):
         pass
     def tostring(self):
         return "#<module-path-index>"
 
 class W_ResolvedModulePath(W_Object):
-    _immutable_fields_ = ["name"]
     errorname = "resolved-module-path"
+    _attrs_ = _immutable_fields_ = ["name"]
     def __init__(self, name):
         self.name = name
     def tostring(self):
@@ -158,6 +158,7 @@ class W_Logger(W_Object):
     errorname = "logger"
 
     _immutable_fields_ = ['topic', 'parent', 'propagate_level', 'propagate_topic[*]']
+    _attrs_ = ['topic', 'parent', 'propagate_level', 'propagate_topic']
 
     def __init__(self, topic, parent, propagate_level, propagate_topic):
         self.topic           = topic
@@ -170,7 +171,7 @@ class W_Logger(W_Object):
 
 class W_ContinuationPromptTag(W_Object):
     errorname = "continuation-prompt-tag"
-    _immutable_fields_ = ["name"]
+    _attrs_ = _immutable_fields_ = ["name"]
 
     def __init__(self, name):
         self.name = name
@@ -186,7 +187,7 @@ w_default_continuation_prompt_tag = W_ContinuationPromptTag(None)
 class W_ContinuationMarkSet(W_Object):
     errorname = "continuation-mark-set"
 
-    _immutable_fields_ = ["cont", "prompt_tag"]
+    _attrs_ = _immutable_fields_ = ["cont", "prompt_tag"]
 
     def __init__(self, cont, prompt_tag):
         self.cont = cont
@@ -197,7 +198,7 @@ class W_ContinuationMarkSet(W_Object):
 
 class W_ContinuationMarkKey(W_Object):
     errorname = "continuation-mark-key"
-    _immutable_fields_ = ["name"]
+    _attrs_ = _immutable_fields_ = ["name"]
     def __init__(self, name):
         self.name = name
 
@@ -214,6 +215,7 @@ class W_ContinuationMarkKey(W_Object):
 
 class W_VariableReference(W_Object):
     errorname = "variable-reference"
+    _attrs_ = ['varref']
     def __init__(self, varref):
         self.varref = varref
     def tostring(self):
@@ -258,33 +260,36 @@ class W_VectorSuper(W_Object):
 # Things that are vector?
 class W_MVector(W_VectorSuper):
     errorname = "vector"
+    _attrs_ = []
 
 class W_List(W_Object):
     errorname = "list"
+    _attrs_ = []
     def __init__(self):
         raise NotImplementedError("abstract base class")
 
 class W_Cons(W_List):
     "Abstract for specialized conses. Concrete general in W_WrappedCons"
     errorname = "pair"
-
+    _attrs_ = []
     @staticmethod
-    def make(car, cdr):
+    @specialize.arg(2)
+    def make(car, cdr, force_proper=False):
         from pycket import config
         if not config.type_size_specialization:
             if cdr.is_proper_list():
                 return W_WrappedConsProper(car, cdr)
             return W_WrappedCons(car, cdr)
         elif isinstance(car, W_Fixnum):
-            if cdr.is_proper_list():
+            if force_proper or cdr.is_proper_list():
                 return W_UnwrappedFixnumConsProper(car.value, cdr)
             return W_UnwrappedFixnumCons(car.value, cdr)
         elif isinstance(car, W_Flonum):
-            if cdr.is_proper_list():
+            if force_proper or cdr.is_proper_list():
                 return W_UnwrappedFlonumConsProper(car.value, cdr)
             return W_UnwrappedFlonumCons(car.value, cdr)
         else:
-            if cdr.is_proper_list():
+            if force_proper or cdr.is_proper_list():
                 return W_WrappedConsProper(car, cdr)
             return W_WrappedCons(car, cdr)
 
@@ -331,8 +336,15 @@ class W_Cons(W_List):
             w_curr2 = w_curr2.cdr()
         return w_curr1.equal(w_curr2)
 
+    def _unsafe_set_cdr(self, val):
+        raise NotImplementedError("abstract base class")
+
+    def clone(self):
+        raise NotImplementedError("abstract base class")
+
+@add_copy_method(copy_method="clone")
 class W_UnwrappedFixnumCons(W_Cons):
-    _immutable_fields_ = ["_car", "_cdr"]
+    _attrs_ = _immutable_fields_ = ["_car", "_cdr"]
     def __init__(self, a, d):
         self._car = a
         self._cdr = d
@@ -343,10 +355,15 @@ class W_UnwrappedFixnumCons(W_Cons):
     def cdr(self):
         return self._cdr
 
+    def _unsafe_set_cdr(self, val):
+        self._cdr = val
+
+@add_copy_method(copy_method="clone")
 class W_UnwrappedFixnumConsProper(W_UnwrappedFixnumCons):
     def is_proper_list(self):
         return True
 
+@add_copy_method(copy_method="clone")
 class W_UnwrappedFlonumCons(W_Cons):
     _immutable_fields_ = ["_car", "_cdr"]
     def __init__(self, a, d):
@@ -359,20 +376,31 @@ class W_UnwrappedFlonumCons(W_Cons):
     def cdr(self):
         return self._cdr
 
+    def _unsafe_set_cdr(self, val):
+        self._cdr = val
+
+@add_copy_method(copy_method="clone")
 class W_UnwrappedFlonumConsProper(W_UnwrappedFlonumCons):
     def is_proper_list(self):
         return True
 
+@add_copy_method(copy_method="clone")
 class W_WrappedCons(W_Cons):
-    _immutable_fields_ = ["_car", "_cdr"]
+    _attrs_ = _immutable_fields_ = ["_car", "_cdr"]
     def __init__(self, a, d):
         self._car = a
         self._cdr = d
+
     def car(self):
         return self._car
+
     def cdr(self):
         return self._cdr
 
+    def _unsafe_set_cdr(self, val):
+        self._cdr = val
+
+@add_copy_method(copy_method="clone")
 class W_WrappedConsProper(W_WrappedCons):
     def is_proper_list(self):
         return True
@@ -383,6 +411,7 @@ class W_WrappedConsMaybe(W_WrappedCons):
 
 class W_Box(W_Object):
     errorname = "box"
+    _attrs_ = []
     def __init__(self):
         raise NotImplementedError("abstract base class")
 
@@ -397,7 +426,7 @@ class W_Box(W_Object):
 
 class W_MBox(W_Box):
     errorname = "mbox"
-
+    _attrs_ = ['value']
     def __init__(self, value):
         self.value = value
 
@@ -415,7 +444,7 @@ class W_MBox(W_Box):
 
 class W_IBox(W_Box):
     errorname = "ibox"
-    _immutable_fields_ = ["value"]
+    _attrs_ = _immutable_fields_ = ["value"]
 
     def __init__(self, value):
         self.value = value
@@ -437,7 +466,7 @@ class W_IBox(W_Box):
 # chaperoned/impersonated, so we start it from W_Object rather than W_Box.
 class W_WeakBox(W_Object):
     errorname = "weak-box"
-    _immutable_fields_ = ["value"]
+    _attrs_ = _immutable_fields_ = ["value"]
 
     def __init__(self, value):
         assert isinstance(value, W_Object)
@@ -451,7 +480,7 @@ class W_WeakBox(W_Object):
 
 class W_Ephemeron(W_Object):
     errorname = "ephemeron"
-    _immutable_fields_ = ["key", "mapping"]
+    _attrs_ = _immutable_fields_ = ["key", "mapping"]
 
     def __init__(self, key, value):
         assert isinstance(key, W_Object)
@@ -468,6 +497,7 @@ class W_Ephemeron(W_Object):
 
 class W_Placeholder(W_Object):
     errorname = "placeholder"
+    _attrs_ = ['value']
     def __init__(self, value):
         self.value = value
     def tostring(self):
@@ -475,6 +505,7 @@ class W_Placeholder(W_Object):
 
 class W_HashTablePlaceholder(W_Object):
     errorname = "hash-table-placeholder"
+    _attrs_ = []
     def __init__(self, keys, vals):
         pass
     def tostring(self):
@@ -482,11 +513,13 @@ class W_HashTablePlaceholder(W_Object):
 
 class W_MList(W_Object):
     errorname = "mlist"
+    _attrs_ = []
     def __init__(self):
         raise NotImplementedError("abstract base class")
 
 class W_MCons(W_MList):
     errorname = "mpair"
+    _attrs_ = ["_car", "_cdr"]
     def __init__(self, a, d):
         self._car = a
         self._cdr = d
@@ -502,6 +535,7 @@ class W_MCons(W_MList):
         self._cdr = d
 
 class W_Number(W_Object):
+    _attrs_ = []
     errorname = "number"
     def __init__(self):
         raise NotImplementedError("abstract base class")
@@ -515,15 +549,20 @@ class W_Number(W_Object):
     def hash_eqv(self):
         return self.hash_equal(info=None)
 
-class W_Rational(W_Number):
-    _immutable_fields_ = ["_numerator", "_denominator"]
+class W_Real(W_Number):
+    errorname = "real"
+    _attrs_ = []
+
+class W_Rational(W_Real):
+    _attrs_ = _immutable_fields_ = ["_numerator", "_denominator"]
     errorname = "rational"
     def __init__(self, num, den):
         assert isinstance(num, rbigint)
         assert isinstance(den, rbigint)
         self._numerator = num
         self._denominator = den
-        assert den.gt(NULLRBIGINT)
+        if not we_are_translated():
+            assert den.gt(NULLRBIGINT)
 
     @staticmethod
     def make(num, den):
@@ -540,18 +579,24 @@ class W_Rational(W_Number):
         return W_Rational.frombigint(num, den)
 
     @staticmethod
-    def fromint(n, d=1):
+    def fromint(n, d=1, need_to_check=True):
         assert isinstance(n, int)
         assert isinstance(d, int)
-        return W_Rational.frombigint(rbigint.fromint(n), rbigint.fromint(d))
+        from fractions import gcd
+        g = gcd(n, d)
+        n = n // g
+        d = d // g
+        if need_to_check and d == 1:
+            return W_Fixnum(n)
+        return W_Rational(rbigint.fromint(n), rbigint.fromint(d))
 
     @staticmethod
-    def frombigint(n, d=rbigint.fromint(1)):
+    def frombigint(n, d=rbigint.fromint(1), need_to_check=True):
         from pycket.arithmetic import gcd
         g = gcd(n, d)
         n = n.floordiv(g)
         d = d.floordiv(g)
-        if d.eq(rbigint.fromint(1)):
+        if need_to_check and d.eq(rbigint.fromint(1)):
             return W_Bignum.frombigint(n)
         return W_Rational(n, d)
 
@@ -579,9 +624,9 @@ class W_Rational(W_Number):
         hash2 = self._denominator.hash()
         return rarithmetic.intmask(hash1 + 1000003 * hash2)
 
-
-class W_Integer(W_Number):
+class W_Integer(W_Real):
     errorname = "integer"
+    _attrs_ = []
 
     def toint(self):
         raise NotImplementedError("abstract base class")
@@ -604,11 +649,17 @@ class W_Integer(W_Number):
             return W_Bignum(rbigint.fromfloat(value))
         return W_Fixnum(val)
 
-
 @memoize_constructor
 class W_Fixnum(W_Integer):
-    _immutable_fields_ = ["value"]
+
+    _immutable_ = True
+    _attrs_ = _immutable_fields_ = ["value"]
     errorname = "fixnum"
+
+    MIN_INTERNED   = -5
+    MAX_INTERNED   = 256
+    INTERNED_RANGE = (MIN_INTERNED, MAX_INTERNED)
+    cache = []
 
     def tostring(self):
         return str(self.value)
@@ -631,12 +682,22 @@ class W_Fixnum(W_Integer):
     def hash_equal(self, info=None):
         return self.value
 
+    @staticmethod
+    @try_inline
+    def make_or_interned(val):
+        from rpython.rlib.rarithmetic import int_between
+        if int_between(W_Fixnum.MIN_INTERNED, val, W_Fixnum.MAX_INTERNED):
+            return W_Fixnum.cache[val - W_Fixnum.MIN_INTERNED]
+        return W_Fixnum(val)
+
 W_Fixnum.ZERO = W_Fixnum.make(0)
 W_Fixnum.ONE  = W_Fixnum.make(1)
 W_Fixnum.TWO  = W_Fixnum.make(2)
+W_Fixnum.cache = map(W_Fixnum.make, range(*W_Fixnum.INTERNED_RANGE))
 
-class W_Flonum(W_Number):
-    _immutable_fields_ = ["value"]
+class W_Flonum(W_Real):
+    _immutable_ = True
+    _attrs_ = _immutable_fields_ = ["value"]
     errorname = "flonum"
 
     def __init__(self, val):
@@ -671,7 +732,8 @@ W_Flonum.NEGINF = W_Flonum(-float("inf"))
 W_Flonum.NAN    = W_Flonum(float("nan"))
 
 class W_Bignum(W_Integer):
-    _immutable_fields_ = ["value"]
+    _immutable_ = True
+    _attrs_ = _immutable_fields_ = ["value"]
 
     def tostring(self):
         return self.value.str()
@@ -701,10 +763,11 @@ class W_Bignum(W_Integer):
 
 @memoize_constructor
 class W_Complex(W_Number):
-    _immutable_fields_ = ["real", "imag"]
+    _immutable_ = True
+    _attrs_ = _immutable_fields_ = ["real", "imag"]
     def __init__(self, re, im):
-        assert isinstance(re, W_Number)
-        assert isinstance(im, W_Number)
+        assert isinstance(re, W_Real)
+        assert isinstance(im, W_Real)
         self.real = re
         self.imag = im
 
@@ -729,7 +792,7 @@ class W_Complex(W_Number):
 
 @memoize_constructor
 class W_Character(W_Object):
-    _immutable_fields_ = ["value"]
+    _attrs_ = _immutable_fields_ = ["value"]
     errorname = "char"
     def __init__(self, val):
         self.value = val
@@ -755,6 +818,7 @@ class W_Character(W_Object):
 
 class W_Thread(W_Object):
     errorname = "thread"
+    _attrs_ = []
     def __init__(self):
         pass
     def tostring(self):
@@ -762,6 +826,7 @@ class W_Thread(W_Object):
 
 class W_Semaphore(W_Object):
     errorname = "semaphore"
+    _attrs_ = ['n']
     def __init__(self, n):
         self.n = n
     def post(self):
@@ -776,10 +841,11 @@ class W_Semaphore(W_Object):
 
 class W_Evt(W_Object):
     errorname = "evt"
+    _attrs_ = []
 
 class W_SemaphorePeekEvt(W_Evt):
     errorname = "semaphore-peek-evt"
-    _immutable_fields_ = ["sema"]
+    _attrs_ = _immutable_fields_ = ["sema"]
     def __init__(self, sema):
         self.sema = sema
     def tostring(self):
@@ -787,12 +853,13 @@ class W_SemaphorePeekEvt(W_Evt):
 
 class W_PseudoRandomGenerator(W_Object):
     errorname = "pseudo-random-generator"
+    _attrs_ = []
     def __init__(self):
         pass
 
 class W_Path(W_Object):
-    _immutable_fields_ = ["path"]
     errorname = "path"
+    _attrs_ = _immutable_fields_ = ["path"]
     def __init__(self, p):
         self.path = p
     def equal(self, other):
@@ -803,11 +870,14 @@ class W_Path(W_Object):
         return "#<path:%s>" % self.path
 
 class W_Void(W_Object):
-    def __init__(self): pass
+    _attrs_ = []
+    def __init__(self):
+        pass
     def tostring(self):
         return "#<void>"
 
 class W_Null(W_List):
+    _attrs_ = []
     def __init__(self):
         pass
 
@@ -822,6 +892,7 @@ w_null = W_Null()
 
 class W_Bool(W_Object):
     errorname = "boolean"
+    _attrs_ = []
     @staticmethod
     def make(b):
         if b: return w_true
@@ -839,20 +910,34 @@ class W_Bool(W_Object):
 w_false = W_Bool()
 w_true = W_Bool()
 
+class ThreadCellTable(rweaklist.RWeakListMixin):
+    def __init__(self):
+        self.initialize()
+
+    def __iter__(self):
+        handles = self.get_all_handles()
+        for ref in handles:
+            val = ref()
+            if val is not None:
+                yield val
+
 class W_ThreadCellValues(W_Object):
-    _immutable_fields_ = ["assoc"]
     errorname = "thread-cell-values"
+    _immutable_fields_ = ["assoc"]
+    _attrs_ = ["assoc", "value"]
     def __init__(self):
         self.assoc = {}
-        for c in W_ThreadCell._table:
-            if c.preserved:
-                self.assoc[c] = c.value
+        for threadcell in W_ThreadCell._table:
+            if threadcell.preserved:
+                self.assoc[threadcell] = threadcell.value
 
 class W_ThreadCell(W_Object):
-    _immutable_fields_ = ["initial", "preserved"]
     errorname = "thread-cell"
+    _immutable_fields_ = ["initial", "preserved"]
+    _attrs_ = ["initial", "preserved", "value"]
     # All the thread cells in the system
-    _table = []
+    # TODO: Use a weak list to store the existing thread cells
+    _table = ThreadCellTable()
 
     def __init__(self, val, preserved):
         # TODO: This should eventually be a mapping from thread ids to values
@@ -860,7 +945,7 @@ class W_ThreadCell(W_Object):
         self.initial = val
         self.preserved = preserved
 
-        W_ThreadCell._table.append(self)
+        W_ThreadCell._table.add_handle(self)
 
     def set(self, val):
         self.value = val
@@ -868,31 +953,21 @@ class W_ThreadCell(W_Object):
     def get(self):
         return self.value
 
-@memoize_constructor
-class W_Bytes(W_Object):
-    errorname = "bytes"
-    _immutable_fields_ = ['value']
-    _attrs_ = ['value']
-
-    @staticmethod
-    def from_string(str, immutable=True):
-        if immutable:
-            return W_ImmutableBytes(list(str))
-        else:
-            return W_MutableBytes(list(str))
-
-    def __init__(self, bs):
-        assert bs is not None
-        self.value = check_list_of_chars(bs)
-        make_sure_not_resized(self.value)
+class BytesMixin(object):
 
     def tostring(self):
+        # TODO: No printable byte values should be rendered as base 8
         return "#\"%s\"" % "".join(["\\%d" % ord(i) for i in self.value])
+
+    def as_bytes_list(self):
+        return self.value
 
     def equal(self, other):
         if not isinstance(other, W_Bytes):
             return False
-        return len(self.value) == len(other.value) and str(self.value) == str(other.value)
+        b1 = self.as_bytes_list()
+        b2 = other.as_bytes_list()
+        return b1 == b2
 
     def hash_equal(self, info=None):
         from rpython.rlib.rarithmetic import intmask
@@ -909,24 +984,98 @@ class W_Bytes(W_Object):
         x ^= length
         return intmask(x)
 
-    def immutable(self):
-        raise NotImplementedError("abstract base class")
-
     def ref(self, n):
         l = len(self.value)
         if n < 0 or n >= l:
             raise SchemeException("bytes-ref: index %s out of bounds for length %s"% (n, l))
         return W_Fixnum(ord(self.value[n]))
 
-    def set(self, n, v):
-        raise NotImplementedError("abstract base class")
+    def ref_char(self, n):
+        l = len(self.value)
+        if n < 0 or n >= l:
+            raise SchemeException("bytes-ref: index %s out of bounds for length %s"% (n, l))
+        return self.value[n]
 
     def as_str(self):
         return "".join(self.value)
 
+    def getslice(self, start, end):
+        assert start >= 0 and end >= 0
+        bytes = self.value
+        return bytes[start:end]
+
+    def length(self):
+        return len(self.value)
+
+class W_Bytes(W_Object):
+    errorname = "bytes"
+    _immutable_fields_ = []
+    _attrs_ = []
+
+    def __init__(self, bs):
+        raise NotImplementedError("abstract base class")
+
+    def as_bytes_list(self):
+        raise NotImplementedError("abstract base class")
+
+    def length(self):
+        raise NotImplementedError("abstract base class")
+
+    @staticmethod
+    def from_string(str, immutable=True):
+        if immutable:
+            return W_ImmutableBytes(list(str))
+        else:
+            return W_MutableBytes(list(str))
+
+    @staticmethod
+    def from_charlist(chars, immutable=True):
+        if immutable:
+            return W_ImmutableBytes(chars)
+        else:
+            return W_MutableBytes(chars)
+
+    def tostring(self):
+        raise NotImplementedError("abstract base class")
+
+    def equal(self, other):
+        raise NotImplementedError("abstract base class")
+
+    def hash_equal(self, info=None):
+        raise NotImplementedError("abstract base class")
+
+    def immutable(self):
+        raise NotImplementedError("abstract base class")
+
+    def ref(self, n):
+        raise NotImplementedError("abstract base class")
+
+    def ref_char(self, n):
+        raise NotImplementedError("abstract base class")
+
+    def set(self, n, v):
+        raise NotImplementedError("abstract base class")
+
+    def set_char(self, n, v):
+        raise NotImplementedError("abstract base class")
+
+    def as_str(self):
+        raise NotImplementedError("abstract base class")
+
+    def getslice(self, start, end):
+        raise NotImplementedError("abstract base class")
 
 class W_MutableBytes(W_Bytes):
     errorname = "bytes"
+    _attrs_ = ['value']
+    _immutable_fields_ = ['value']
+
+    import_from_mixin(BytesMixin)
+
+    def __init__(self, bs):
+        assert bs is not None
+        self.value = check_list_of_chars(bs)
+        make_sure_not_resized(self.value)
 
     def immutable(self):
         return False
@@ -937,9 +1086,22 @@ class W_MutableBytes(W_Bytes):
             raise SchemeException("bytes-set!: index %s out of bounds for length %s"% (n, l))
         self.value[n] = chr(v)
 
+    def set_char(self, n, v):
+        l = len(self.value)
+        assert n >= 0 and n < len(self.value)
+        self.value[n] = v
 
 class W_ImmutableBytes(W_Bytes):
     errorname = "bytes"
+    _attrs_ = ['value']
+    _immutable_fields_ = ['value[*]']
+
+    import_from_mixin(BytesMixin)
+
+    def __init__(self, bs):
+        assert bs is not None
+        self.value = check_list_of_chars(bs)
+        make_sure_not_resized(self.value)
 
     def immutable(self):
         return True
@@ -947,55 +1109,158 @@ class W_ImmutableBytes(W_Bytes):
     def set(self, n, v):
         raise SchemeException("bytes-set!: can't mutate immutable bytes")
 
+    def set_char(self, n, v):
+        assert False
+
+class W_MMapBytes(W_Bytes):
+    errorname = "bytes"
+    _attrs_ = ['value']
+    _immutable_fields_ = ['value']
+
+    import_from_mixin(BytesMixin)
+
+    def __init__(self, bs):
+        assert bs is not None
+        self.value = bs
+
+    def immutable(self):
+        return False
+
+    def set(self, n, v):
+        if n < 0 or n >= self.value.size:
+            raise SchemeException("bytes-set!: index %s out of bounds for length %s"% (n, self.value.size))
+        self.value.data[n] = chr(v)
+
+    def set_char(self, n, v):
+        assert n >= 0 and n < self.value.size
+        self.value.data[n] = v
+
+    def tostring(self):
+        assert False
+        # TODO: No printable byte values should be rendered as base 8
+        #return "#\"%s\"" % "".join(["\\%d" % ord(i) for i in self.value.data])
+
+    def as_bytes_list(self):
+        raise SchemeException("nyi")
+
+    def equal(self, other):
+        if not isinstance(other, W_Bytes):
+            return False
+        b1 = self.as_bytes_list()
+        b2 = other.as_bytes_list()
+        return b1 == b2
+
+    def hash_equal(self, info=None):
+        from rpython.rlib.rarithmetic import intmask
+        # like CPython's string hash
+        s = self.value.data
+        length = self.value.size
+        if length == 0:
+            return -1
+        x = ord(s[0]) << 7
+        i = 0
+        while i < length:
+            x = intmask((1000003*x) ^ ord(s[i]))
+            i += 1
+        x ^= length
+        return intmask(x)
+
+    def ref(self, n):
+        l = self.value.size
+        if n < 0 or n >= l:
+            raise SchemeException("bytes-ref: index %s out of bounds for length %s"% (n, l))
+        return W_Fixnum(ord(self.value.data[n]))
+
+    def ref_char(self, n):
+        l = self.value.size
+        if n < 0 or n >= l:
+            raise SchemeException("bytes-ref: index %s out of bounds for length %s"% (n, l))
+        return self.value.data[n]
+
+    def as_str(self):
+        raise SchemeException("nyi")
+
+    def getslice(self, start, end):
+        assert start >= 0 and end >= 0
+        bytes = self.value.data
+        assert False
+        #return bytes[start:end]
+
+    def length(self):
+        return self.value.size
+
+        
+DEFINITELY_NO, MAYBE, DEFINITELY_YES = (-1, 0, 1)
 
 class W_Symbol(W_Object):
-    _immutable_fields_ = ["value", "unreadable", "asciivalue", "utf8value"]
     errorname = "symbol"
-    all_symbols = {}
-    unreadable_symbols = {}
+    _attrs_ = ["unreadable", "_isascii", "_unicodevalue", "utf8value"]
+    _immutable_fields_ = ["unreadable", "utf8value"]
 
     def __init__(self, val, unreadable=False):
-        assert isinstance(val, unicode)
-        self.unicodevalue = val
+        assert isinstance(val, str)
+        self._unicodevalue = None
+        self.utf8value = val
         self.unreadable = unreadable
-        try:
-            self.asciivalue = val.encode("ascii")
-        except UnicodeEncodeError:
-            self.asciivalue = None
-        self.utf8value = val.encode("utf-8")
+        self._isascii = MAYBE
+
+    @staticmethod
+    def _cache_is_ascii(self):
+        from pycket.values_string import _is_ascii
+        if not we_are_translated():
+            assert self._isascii == MAYBE
+        if _is_ascii(self.utf8value):
+            self._isascii = DEFINITELY_YES
+        else:
+            self._isascii = DEFINITELY_NO
+        return self._isascii
+
+    def asciivalue(self):
+        isascii = jit.conditional_call_elidable(
+            self._isascii, W_Symbol._cache_is_ascii, self)
+        if isascii == DEFINITELY_NO:
+            return None
+        return self.utf8value
+
+    @jit.elidable
+    def unicodevalue(self):
+        if self._unicodevalue is None:
+            self._unicodevalue = self.utf8value.decode("utf-8")
+        return self._unicodevalue
 
     @staticmethod
     @jit.elidable
     def make(string):
         # This assert statement makes the lowering phase of rpython break...
         # Maybe comment back in and check for bug.
-        #assert isinstance(string, str)
+        assert isinstance(string, str)
         w_result = W_Symbol.all_symbols.get(string, None)
         if w_result is None:
-            # assume that string is a utf-8 encoded unicode string
-            value = string.decode("utf-8")
-            W_Symbol.all_symbols[string] = w_result = W_Symbol(value)
+            w_result = W_Symbol(string)
+            W_Symbol.all_symbols[string] = w_result
         return w_result
 
     @staticmethod
+    @jit.elidable
     def make_unreadable(string):
-        if string in W_Symbol.unreadable_symbols:
-            return W_Symbol.unreadable_symbols[string]
-        else:
-            # assume that string is a utf-8 encoded unicode string
-            value = string.decode("utf-8")
-            W_Symbol.unreadable_symbols[string] = w_result = W_Symbol(value, True)
-            return w_result
+        w_result = W_Symbol.unreadable_symbols.get(string, None)
+        if w_result is None:
+            w_result = W_Symbol(string, unreadable=True)
+            W_Symbol.unreadable_symbols[string] = w_result
+        return w_result
 
     def __repr__(self):
         return self.utf8value
 
+    @jit.elidable
     def is_interned(self):
         string = self.utf8value
-        if string in W_Symbol.all_symbols:
-            return W_Symbol.all_symbols[string] is self
-        if string in W_Symbol.unreadable_symbols:
-            return W_Symbol.unreadable_symbols[string] is self
+        symbol = W_Symbol.all_symbols.get(string, None)
+        if symbol is self:
+            return True
+        symbol = W_Symbol.unreadable_symbols.get(string, None)
+        if symbol is self:
+            return True
         return False
 
     def tostring(self):
@@ -1004,14 +1269,18 @@ class W_Symbol(W_Object):
     def variable_name(self):
         return self.utf8value
 
+# According to samth, its not safe to use a weak table for symbols
+W_Symbol.all_symbols = {}
+W_Symbol.unreadable_symbols = {}
+
 # XXX what are these for?
-break_enabled_key = W_Symbol(u"break-enabled-key")
-exn_handler_key = W_Symbol(u"exnh")
-parameterization_key = W_Symbol(u"parameterization")
+break_enabled_key = W_Symbol("break-enabled-key")
+exn_handler_key = W_Symbol("exnh")
+parameterization_key = W_Symbol("parameterization")
 
 class W_Keyword(W_Object):
-    _immutable_fields_ = ["value"]
     errorname = "keyword"
+    _attrs_=  _immutable_fields_ = ["value"]
     all_symbols = {}
     @staticmethod
     def make(string):
@@ -1030,6 +1299,7 @@ class W_Keyword(W_Object):
         return "'#:%s" % self.value
 
 class W_Procedure(W_Object):
+    _attrs_ = []
     def __init__(self):
         raise NotImplementedError("Abstract base class")
     def iscallable(self):
@@ -1045,6 +1315,7 @@ class W_Procedure(W_Object):
 
 
 class W_AssignmentTransformer(W_Object):
+    _attrs_ = []
     def __init__(self):
         raise NotImplementedError("Abstract base class")
 
@@ -1055,7 +1326,7 @@ class W_AssignmentTransformer(W_Object):
 # This is needed because with-continuation-mark operates over the AST while
 # W_InterposeProcedure can do a `set_cmk` with a closure.
 class W_ThunkBodyCMK(W_Procedure):
-    _immutable_fields_ = ["body"]
+    _attrs_ = _immutable_fields_ = ["body"]
 
     def __init__(self, body):
         self.body = body
@@ -1065,7 +1336,7 @@ class W_ThunkBodyCMK(W_Procedure):
         return self.body, env, cont
 
 class W_ThunkProcCMK(W_Procedure):
-    _immutable_fields_ = ["proc", "args"]
+    _attrs_ = _immutable_fields_ = ["proc", "args"]
 
     def __init__(self, proc, args):
         self.proc = proc
@@ -1078,7 +1349,7 @@ class W_ThunkProcCMK(W_Procedure):
 
 
 class W_Prim(W_Procedure):
-    _immutable_fields_ = ["name", "code", "arity", "result_arity", "simple1", "simple2"]
+    _attrs_ = _immutable_fields_ = ["name", "code", "arity", "result_arity", "simple1", "simple2"]
 
     def __init__ (self, name, code, arity=Arity.unknown, result_arity=None, simple1=None, simple2=None):
         self.name = W_Symbol.make(name)
@@ -1089,7 +1360,9 @@ class W_Prim(W_Procedure):
         self.simple1 = simple1
         self.simple2 = simple2
 
-    def get_arity(self):
+    def get_arity(self, promote=False):
+        if promote:
+            self = jit.promote(self)
         return self.arity
 
     def get_result_arity(self):
@@ -1102,23 +1375,29 @@ class W_Prim(W_Procedure):
     def tostring(self):
         return "#<procedure:%s>" % self.name.variable_name()
 
-def to_list(l): return to_improper(l, w_null)
+@always_inline
+def to_list(l, start=0):
+    return to_improper(l, w_null, start=start)
+
+def to_improper(l, curr, start=0):
+    return to_improper_impl(l, curr, start)
 
 @jit.look_inside_iff(
-    lambda l, curr: jit.loop_unrolling_heuristic(l, len(l), UNROLLING_CUTOFF))
-def to_improper(l, curr):
-    for i in range(len(l) - 1, -1, -1):
+    lambda l, curr, start: jit.loop_unrolling_heuristic(l, len(l) - start, UNROLLING_CUTOFF))
+def to_improper_impl(l, curr, start):
+    assert start >= 0
+    for i in range(len(l) - 1, start - 1, -1):
         curr = W_Cons.make(l[i], curr)
     return curr
 
-@jit.look_inside_iff(
-    lambda v, curr: jit.loop_unrolling_heuristic(v, v.len, UNROLLING_CUTOFF))
+@jit.look_inside_iff(lambda v, curr: v.unrolling_heuristic())
 def vector_to_improper(v, curr):
     for i in range(v.len - 1, -1, -1):
         curr = W_Cons.make(v.ref(i), curr)
     return curr
 
-def to_mlist(l): return to_mimproper(l, w_null)
+def to_mlist(l):
+    return to_mimproper(l, w_null)
 
 @jit.look_inside_iff(
     lambda l, curr: jit.loop_unrolling_heuristic(l, len(l), UNROLLING_CUTOFF))
@@ -1127,13 +1406,15 @@ def to_mimproper(l, curr):
         curr = W_MCons(l[i], curr)
     return curr
 
-@always_inline
-def from_list_unroll_pred(lst, idx, unroll_to=0):
+def from_list_unroll_pred(lst, idx, unroll_to=0, force=False):
     if not jit.we_are_jitted():
         return False
     if unroll_to == -1:
         return False
-    return not jit.isvirtual(lst) and idx > unroll_to
+    if force:
+        return idx > unroll_to
+    else:
+        return not jit.isvirtual(lst) and idx > unroll_to
 
 @jit.elidable
 def from_list_elidable(w_curr):
@@ -1147,11 +1428,12 @@ def from_list_elidable(w_curr):
         raise SchemeException("Expected list, but got something else")
 
 @jit.unroll_safe
-def from_list(w_curr, unroll_to=0):
+@specialize.arg(2)
+def from_list(w_curr, unroll_to=0, force=False):
     result = []
     n = 0
     while isinstance(w_curr, W_Cons):
-        if from_list_unroll_pred(w_curr, n, unroll_to=unroll_to):
+        if from_list_unroll_pred(w_curr, n, unroll_to=unroll_to, force=force):
             return result + from_list_elidable(w_curr)
         result.append(w_curr.car())
         w_curr = w_curr.cdr()
@@ -1172,33 +1454,40 @@ def from_list_iter(lst):
 class W_Continuation(W_Procedure):
     errorname = "continuation"
 
-    _immutable_fields_ = ["cont", "prompt_tag"]
+    _attrs_ = _immutable_fields_ = ["cont", "prompt_tag"]
+
+    escape = False
 
     def __init__(self, cont, prompt_tag=None):
         self.cont = cont
         self.prompt_tag = prompt_tag
 
-    def get_arity(self):
+    def get_arity(self, promote=False):
         # FIXME: see if Racket ever does better than this
         return Arity.unknown
 
     def call(self, args, env, cont):
         from pycket.prims.control import install_continuation
-        return install_continuation(self.cont, self.prompt_tag, args, env, cont)
+        return install_continuation(self.cont, self.prompt_tag, args, env, cont,
+                                    escape=self.escape)
 
     def tostring(self):
         return "#<continuation>"
 
+class W_EscapeContinuation(W_Continuation):
+    _attrs_ = []
+    escape = True
+
 class W_ComposableContinuation(W_Procedure):
     errorname = "composable-continuation"
 
-    _immutable_fields_ = ["cont", "prompt_tag"]
+    _attrs_ = _immutable_fields_ = ["cont", "prompt_tag"]
 
     def __init__(self, cont, prompt_tag=None):
         self.cont = cont
         self.prompt_tag = prompt_tag
 
-    def get_arity(self):
+    def get_arity(self, promote=False):
         return Arity.unknown
 
     def call(self, args, env, cont):
@@ -1211,7 +1500,9 @@ class W_ComposableContinuation(W_Procedure):
 
 @inline_small_list(immutable=True, attrname="envs", factoryname="_make")
 class W_Closure(W_Procedure):
-    _immutable_fields_ = ["caselam"]
+    _immutable_ = True
+    _attrs_ = _immutable_fields_ = ["caselam"]
+
     @jit.unroll_safe
     def __init__(self, caselam, env):
         self.caselam = caselam
@@ -1239,7 +1530,10 @@ class W_Closure(W_Procedure):
         envs = [None] * num_lams
         return W_Closure._make(envs, caselam, env)
 
-    def get_arity(self):
+    def get_arity(self, promote=False):
+        caselam = self.caselam
+        if promote:
+            caselam = jit.promote(caselam)
         return self.caselam.get_arity()
 
     @jit.unroll_safe
@@ -1275,9 +1569,10 @@ class W_Closure(W_Procedure):
     def call(self, args, env, cont):
         return self.call_with_extra_info(args, env, cont, None)
 
-@inline_small_list(immutable=True, attrname="vals", factoryname="_make", unbox_num=True)
+@inline_small_list(immutable=True, attrname="vals", factoryname="_make", unbox_num=True, nonull=True)
 class W_Closure1AsEnv(ConsEnv):
-    _immutable_fields_ = ['caselam']
+    _immutable_ = True
+    _attrs_ = _immutable_fields_ = ['caselam']
 
     def __init__(self, caselam, prev):
         ConsEnv.__init__(self, prev)
@@ -1287,7 +1582,7 @@ class W_Closure1AsEnv(ConsEnv):
     @jit.unroll_safe
     def make(vals, caselam, prev):
         recursive_sym = caselam.recursive_sym
-        if not vals:
+        if not we_are_translated() and not vals:
             for s in caselam.lams[0].frees.elems:
                 assert s is recursive_sym
         return W_Closure1AsEnv._make(vals, caselam, prev)
@@ -1304,8 +1599,11 @@ class W_Closure1AsEnv(ConsEnv):
     def tostring(self):
         return self.caselam.tostring_as_closure()
 
-    def get_arity(self):
-        return self.caselam.get_arity()
+    def get_arity(self, promote=False):
+        caselam = self.caselam
+        if promote:
+            caselam = jit.promote(caselam)
+        return caselam.get_arity()
 
     def call_with_extra_info(self, args, env, cont, calling_app):
         env_structure = None
@@ -1360,15 +1658,16 @@ class W_Closure1AsEnv(ConsEnv):
         prev = self.get_prev(env_structure)
         return prev.lookup(sym, env_structure.prev)
 
-
 class W_PromotableClosure(W_Procedure):
     """ A W_Closure that is promotable, ie that is cached in some place and
     unlikely to change. """
 
-    _immutable_fields_ = ["closure"]
+    _attrs_ = _immutable_fields_ = ["closure", "arity"]
 
     def __init__(self, caselam, toplevel_env):
-        self.closure = W_Closure._make([ConsEnv.make([], toplevel_env)] * len(caselam.lams), caselam, toplevel_env)
+        envs = [toplevel_env] * len(caselam.lams)
+        self.closure = W_Closure._make(envs, caselam, toplevel_env)
+        self.arity   = caselam._arity
 
     def enable_jitting(self):
         self.closure.enable_jitting()
@@ -1381,23 +1680,40 @@ class W_PromotableClosure(W_Procedure):
         jit.promote(self)
         return self.closure.call_with_extra_info(args, env, cont, calling_app)
 
-    def get_arity(self):
-        return self.closure.get_arity()
+    def get_arity(self, promote=False):
+        if promote:
+            self = jit.promote(self)
+        return self.arity
 
     def tostring(self):
         return self.closure.tostring()
 
 class W_EnvVarSet(W_Object):
     errorname = "environment-variable-set"
-    def __init__(self): pass
+    _attrs_ = []
+    def __init__(self):
+        pass
 
 class W_EOF(W_Object):
     errorname = "eof"
-    def __init__(self): pass
+    _attrs_ = []
+    def __init__(self):
+        pass
     def tostring(self):
         return "#<eof>"
 
 eof_object = W_EOF()
+
+class W_ReadTable(W_Object):
+    errorname = "readtable"
+
+    _attrs_ = _immutable_fields_ = ["parent", "key", "mode", "action"]
+
+    def __init__(self, parent, key, mode, action):
+        self.parent = parent
+        self.key = key
+        self.mode = mode
+        self.action = action
 
 class W_Port(W_Object):
     errorname = "port"
@@ -1420,6 +1736,7 @@ class W_Port(W_Object):
 
 class W_OutputPort(W_Port):
     errorname = "output-port"
+    _attrs_ = []
     def __init__(self):
         pass
 
@@ -1434,6 +1751,7 @@ class W_OutputPort(W_Port):
 
 class W_StringOutputPort(W_OutputPort):
     errorname = "output-port"
+    _attrs_ = ['closed', 'str']
     def __init__(self):
         self.closed = False
         self.str = StringBuilder()
@@ -1470,8 +1788,9 @@ class W_InputPort(W_Port):
         raise NotImplementedError("abstract class")
 
 class W_StringInputPort(W_InputPort):
-    _immutable_fields_ = ["str"]
     errorname = "input-port"
+    _immutable_fields_ = ["str"]
+    _attrs_ = ['closed', 'str', 'ptr']
 
     def __init__(self, str):
         self.closed = False
@@ -1531,6 +1850,7 @@ class W_StringInputPort(W_InputPort):
 class W_FileInputPort(W_InputPort):
     errorname = "input-port"
     _immutable_fields_ = ["file"]
+    _attrs_ = ['closed', 'file']
 
     def __init__(self, f):
         self.closed = False
@@ -1577,6 +1897,7 @@ class W_FileInputPort(W_InputPort):
 class W_FileOutputPort(W_OutputPort):
     errorname = "output-port"
     _immutable_fields_ = ["file"]
+    _attrs_ = ['closed', 'file']
 
     def __init__(self, f):
         self.closed = False

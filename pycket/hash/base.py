@@ -7,6 +7,7 @@ from rpython.rlib             import rerased
 from rpython.rlib.objectmodel import compute_hash, import_from_mixin, r_dict, specialize
 
 class W_Missing(W_Object):
+    _attrs_ = []
     def __init__(self):
         pass
 
@@ -25,6 +26,12 @@ class W_HashTable(W_Object):
         raise NotImplementedError("abstract method")
 
     def hash_ref(self, k, env, cont):
+        raise NotImplementedError("abstract method")
+
+    def _hash_ref(self, k):
+        raise NotImplementedError("abstract method")
+
+    def _hash_set(self, k, v):
         raise NotImplementedError("abstract method")
 
     def hash_remove(self, k, env, cont):
@@ -90,7 +97,7 @@ def ll_get_dict_item(RES, dict, i):
     else:
         raise KeyError
 
-@specialize.call_location()
+@specialize.arg(2)
 def next_valid_index(d, i, valid=bool):
     """
     Probes the hash table for the next valid index into the table. Raises

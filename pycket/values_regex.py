@@ -36,6 +36,7 @@ class PortBuffer(buffer.Buffer):
 
 class W_AnyRegexp(W_Object):
     _immutable_fields_ = ["source"]
+    _attrs_ = ["source", "code", "flags", "groupcount", "groupindex", "indexgroup", "group_offsets"]
     errorname = "regexp"
     def __init__(self, source):
         self.source = source
@@ -57,6 +58,7 @@ class W_AnyRegexp(W_Object):
         start, end = rsre_core._adjust(start, end, len(s))
         if isinstance(s, unicode):
             return rsre_core.UnicodeMatchContext(self.code, s, start, end, self.flags)
+        assert isinstance(s, str)
         return rsre_core.StrMatchContext(self.code, s, start, end, self.flags)
 
     @specialize.argtype(1)

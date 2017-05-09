@@ -18,11 +18,24 @@ PYFILES := $(shell find . -name '*.py' -type f)
 .PHONY: all translate-jit-all $(TRANSLATE_TARGETS) translate-no-jit
 .PHONY: setup test coverage
 
+PYPY_EXECUTABLE := $(shell which pypy)
+BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+
+ifeq ($(PYPY_EXECUTABLE),)
+RUNINTERP = python
+else
+RUNINTERP = $(PYPY_EXECUTABLE)
+endif
+
+WITH_JIT = -Ojit --translation-jit_opencoder_model=big
+
+
 translate-jit-all: $(TRANSLATE_TARGETS)
 all: translate-jit-all translate-no-jit
 
 
 translate-jit: pycket-c
+translate-no-hidden-classes: pycket-c-no-hidden-classes
 translate-no-prune-env: pycket-c-no-prune-env
 translate-no-two-state: pycket-c-no-two-state
 translate-no-callgraph: pycket-c-no-callgraph
@@ -31,26 +44,33 @@ translate-no-type-size-specialization: pycket-c-no-type-size-specialization
 translate-no-jit: pycket-c-nojit
 
 pycket-c: $(PYFILES)
-	$(RPYTHON) -Ojit --translation-jit_opencoder_model=big targetpycket.py
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py
+	cp pycket-c pycket-c-$(BRANCH)
+
+pycket-c-no-hidden-classes: $(PYFILES)
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py --no-hidden-classes
 
 pycket-c-no-prune-env: $(PYFILES)
-	$(RPYTHON) -Ojit --translation-jit_opencoder_model=big targetpycket.py --no-prune-env
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py --no-prune-env
 
 pycket-c-no-two-state: $(PYFILES)
-	$(RPYTHON) -Ojit --translation-jit_opencoder_model=big targetpycket.py --no-two-state
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py --no-two-state
 
 pycket-c-no-callgraph: $(PYFILES)
-	$(RPYTHON) -Ojit --translation-jit_opencoder_model=big targetpycket.py --no-callgraph
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py --no-callgraph
 
 pycket-c-no-strategies: $(PYFILES)
-	$(RPYTHON) -Ojit targetpycket.py --no-strategies
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py --no-strategies
 
 pycket-c-no-type-size-specialization: $(PYFILES)
-	$(RPYTHON) -Ojit targetpycket.py --no-type-size-specialization
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) targetpycket.py --no-type-size-specialization
 
 pycket-c-nojit: $(PYFILES)
-	$(RPYTHON) targetpycket.py
+	$(RUNINTERP) $(RPYTHON) targetpycket.py
 
+debug: $(PYFILES)
+	$(RUNINTERP) $(RPYTHON) $(WITH_JIT) --lldebug targetpycket.py
+	cp pycket-c pycket-c-debug
 
 setup:
 	raco pkg install -t dir pycket/pycket-lang/ || \
@@ -59,10 +79,13 @@ setup:
 	hg -R $(PYPYPATH) update
 
 test: $(PYFILES)
-	$(PYTEST) pycket
+	$(RUNINTERP) $(PYTEST) pycket
+
+test-random: $(PYFILES)
+	$(RUNINTERP) $(PYTEST) --random pycket
 
 test-bytecode: $(PYFILES)
-	$(PYTEST) --bytecode go pycket
+	$(RUNINTERP) $(PYTEST) --bytecode go pycket
 
 coverage: pycket/test/coverage_report .coverage
 pycket/test/coverage_report .coverage: $(PYFILES)

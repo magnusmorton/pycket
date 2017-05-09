@@ -1,7 +1,7 @@
 
 from pycket                 import values
 from pycket                 import values_parameter
-from pycket.argument_parser import ArgParser, EndOfInput
+from pycket.argument_parser import ArgParser
 from pycket.arity           import Arity
 from pycket.base            import W_Object
 from pycket.error           import SchemeException
@@ -32,8 +32,8 @@ def scheme_extend_parameterization(args):
 
     parser = ArgParser("extend-parameterization", args, start_at=1)
     while parser.has_more():
-        param  = parser.parameter()
-        key    = parser.object()
+        param  = parser.expect(values_parameter.W_BaseParameter)
+        key    = parser.expect(values.W_Object)
         config = config.extend([param], [key])
 
     return config
@@ -58,4 +58,25 @@ def call_with_extended_paramz(f, args, keys, vals, env, cont):
 expose_val("parameterization-key", values.parameterization_key)
 expose_val("print-mpair-curly-braces", values_parameter.W_Parameter(values.w_false))
 expose_val("print-pair-curly-braces", values_parameter.W_Parameter(values.w_false))
+
+READ_PARAMS = """
+read-square-bracket-as-paren
+read-curly-brace-as-paren
+read-square-bracket-with-tag
+read-curly-brace-with-tag
+read-accept-box
+read-accept-compiled
+read-accept-bar-quote
+read-accept-graph
+read-decimal-as-inexact
+read-accept-dot
+read-accept-infix-dot
+read-cdot
+read-accept-quasiquote
+read-accept-reader
+read-accept-lang
+"""
+
+for name in READ_PARAMS.split():
+    expose_val(name, values_parameter.W_Parameter(values.w_false))
 
