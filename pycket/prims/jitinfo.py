@@ -1,6 +1,6 @@
 from rpython.rlib import jit, jit_hooks
 from rpython.rlib.jit import Counters
-
+from rpython.jit.metainterp.resoperation import rop, opname
 from pycket.prims.expose import expose, default
 from pycket.values import W_Cons, wrap, W_Symbol, w_null, W_Fixnum, wrap_list, W_Flonum
 from pycket.values_string import W_String
@@ -20,6 +20,9 @@ from pycket.cont import NilCont
             # if key.endswith("trace-info.rkt"):
                 # value.defs[W_Symbol.make(u"silly")].call([],
                         # toplevel_holder.toplevel_env, NilCont())
+@expose ("decode-opnum", [W_Fixnum])
+def decode_opnum(num):
+   return W_String.make(opname[num.toint()])
 
 @expose("asm-lengths")
 @jit.dont_look_inside
