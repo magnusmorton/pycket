@@ -1,11 +1,13 @@
 from rpython.rlib import jit, jit_hooks
 from rpython.rlib.jit import JitHookInterface, Counters
 from rpython.rlib.objectmodel import compute_unique_id, current_object_addr_as_int, compute_hash
+from rpython.jit.metainterp.resoperation import rop
 from pycket.analysis.simple import Simple
 #from pycket.prims.jitinfo import counters
 #from pycket.prims.jitinfo import traces
 from pycket.trace import Trace, Bridge
 from pycket.error import SchemeException
+
 
 
 from pycket.entry_point import toplevel_holder
@@ -135,7 +137,32 @@ class AJPJitInterface(JitHookInterface):
         self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asminfo.asmlen))
                 
             
-            
+#todo make better name
+class NewAJPJitInterface(AJPJitInterface):
+    
+    def _after_compile(self, debug_info, key):
+        from pycket.values import W_Fixnum, wrap_list, W_Cons, W_Character
+        frags = []
+        keys = []
+        current_frag = []
+        guards = []
+        current_guards = []
+        current_key = W_Fixnum(key)
+        for i,op in enumerate(debug_info.operations):
+            opnum = op.getopnum()
+            if rop.is_label(opnum) or opnum == rop.JUMP:
+                frags.append(wrap_list(current_frag))
+                guards.append(wrap_list(current_guards))
+                keys.append(current_key)
+                current_frag = []
+                current_guards = []
+                current_key = W_Fixnum(compute_unique_id(op.getdescr()))
+            elif op.is_guard():
+                current_guards.append(W_Cons.make(W_Fixnum(compute_unique_id(op.getdescr())), W_Fixnum(i)))
+            elif rop.is_jit_debug(opnum):
+                continue
+            current_frag.append(W_Fixnum(opnum))
+
         
 class StdOutJitInterface(JitHookInterface):
 
@@ -193,4 +220,4 @@ def _output(debug_info):
 # #pycket_hooks = PycketJitInterface(Simple())
 test_hooks = FunctionJitInterface()
 
-hooks = AJPJitInterface()
+hooks = NewAJPJitInterface()
