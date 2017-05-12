@@ -20,9 +20,36 @@ from pycket.cont import NilCont
             # if key.endswith("trace-info.rkt"):
                 # value.defs[W_Symbol.make(u"silly")].call([],
                         # toplevel_holder.toplevel_env, NilCont())
-@expose ("decode-opnum", [W_Fixnum])
+@expose("decode-opnum", [W_Fixnum])
 def decode_opnum(num):
    return W_String.make(opname[num.toint()])
+
+
+@expose("class?", [W_Fixnum])
+def what_class(num):
+    """
+    class 0 is alloc,
+    class 1 is num
+    class 2 is array
+    class 3 is object
+    class 4 is guard
+    class 5 is other
+    """
+    if rop.is_malloc(num):
+        return W_Fixnum(0)
+    elif rop._ALWAYS_PURE_FIRST <= num <= rop.NURSERY_PTR_INCREMENT:
+        return W_Fixnum(1)
+    elif rop.GETARRAYITEM_GC <= num <= rop.GETARRAYITEM_RAW or num ==
+    rop.ARRAYLEN_GC or num == rop.GETARRAYITEM_GC_PURE or num == rop.ZERO_ARRAY:
+        return W_Fixnum(2)
+    elif rop.RAW_STORE <= num <= rop.SETFIELD_RAW or rop.LOAD_FROM_GC_TABLE <=
+    num <= rop._RAW_LOAD_LAST:
+        return W_Fixnum(3)
+    elif rop.is_guard(num):
+        return W_Fixnum(4)
+    else:
+        return W_Fixnum(5)
+    
 
 @expose("asm-lengths")
 @jit.dont_look_inside
