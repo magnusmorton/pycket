@@ -26,7 +26,8 @@ def decode_opnum(num):
 
 
 @expose("class?", [W_Fixnum])
-def what_class(num):
+def what_class(opnum):
+    num = opnum.toint()
     """
     class 0 is alloc,
     class 1 is num
@@ -39,11 +40,9 @@ def what_class(num):
         return W_Fixnum(0)
     elif rop._ALWAYS_PURE_FIRST <= num <= rop.NURSERY_PTR_INCREMENT:
         return W_Fixnum(1)
-    elif rop.GETARRAYITEM_GC <= num <= rop.GETARRAYITEM_RAW or num ==
-    rop.ARRAYLEN_GC or num == rop.GETARRAYITEM_GC_PURE or num == rop.ZERO_ARRAY:
+    elif rop.is_getarrayitem(num) or rop.GETARRAYITEM_RAW_I <= num <= rop.GETARRAYITEM_RAW_F or num == rop.ARRAYLEN_GC or num == rop.ZERO_ARRAY:
         return W_Fixnum(2)
-    elif rop.RAW_STORE <= num <= rop.SETFIELD_RAW or rop.LOAD_FROM_GC_TABLE <=
-    num <= rop._RAW_LOAD_LAST:
+    elif rop.RAW_STORE <= num <= rop.SETFIELD_RAW or rop.LOAD_FROM_GC_TABLE <= num <= rop._RAW_LOAD_LAST:
         return W_Fixnum(3)
     elif rop.is_guard(num):
         return W_Fixnum(4)
