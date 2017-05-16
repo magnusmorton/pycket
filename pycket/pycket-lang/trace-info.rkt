@@ -48,3 +48,10 @@
 ;; model is a 5-tuple of weights or 0 for CM0
 (define (set-cost-model model)
   (void))
+
+
+(define (decode-opnum opnum)
+  (void))
+
+(define (class? opnum)
+  (void))
