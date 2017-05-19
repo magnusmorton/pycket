@@ -2,6 +2,8 @@
 (require racket/list)
 (provide
  counters
+ class?
+ decode-opnum
  get-trace-db
  get-guards)
 
