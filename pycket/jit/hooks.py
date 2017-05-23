@@ -162,7 +162,7 @@ class NewAJPJitInterface(AJPJitInterface):
             elif rop.is_jit_debug(opnum):
                 continue
             current_frag.append(W_Fixnum(opnum))
-
+        self._store_trace(keys, frags, guards, W_Fixnum(key), W_Fixnum(debug_info.asminfo.asmlen))
         
 class StdOutJitInterface(JitHookInterface):
 
