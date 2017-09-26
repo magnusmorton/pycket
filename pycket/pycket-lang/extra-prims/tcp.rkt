@@ -57,7 +57,7 @@
   (lib:tcp-listener? x))
 
 ;; Returns a listener, or `#f` if binding to `port` fails.
-(define (tcp-listen port [backlog 5] reuse?)
+(define (tcp-listen port [backlog 5] [reuse? #f])
   (define listener-or-#f
     (with-handlers ([exn:fail:network? (lambda (exn) #f)])
       (lib:tcp-listen port backlog reuse?)))
